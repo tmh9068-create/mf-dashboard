@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MF家計簿ダッシュボード</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css?v={{ ver }}" />
+</head>
+<body>
+
+<!-- ─── ヘッダー ─── -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-left">
+      <span class="logo-icon">💳</span>
+      <h1 class="logo-text">MF家計簿ダッシュボード</h1>
+      <span id="live-badge" class="live-badge">● LIVE</span>
+      <span id="clock" class="header-clock"></span>
+    </div>
+    <div class="header-right">
+      <button class="btn-zaim" id="zaim-sync-btn">
+        <span id="zaim-btn-label">⟳ MF同期</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- ─── サマリー ─── -->
+  <section class="summary-section">
+    <div class="card summary-card s-combined">
+      <div class="sc-top">
+        <div class="sc-item">
+          <div class="s-label">今月の支出</div>
+          <div class="s-value expense-text" id="cur-expense" data-val="0">¥0</div>
+          <div class="s-sub" id="vs-last-month"></div>
+        </div>
+        <div class="sc-sep">/</div>
+        <div class="sc-item">
+          <div class="s-label">月次予算</div>
+          <div class="s-value budget-text" id="cur-budget" data-val="0">¥0</div>
+        </div>
+      </div>
+      <div class="sc-bar-wrap">
+        <div class="sc-bar-fill" id="sc-bar-fill"></div>
+        <div class="sc-bar-label" id="sc-bar-label"></div>
+      </div>
+      <div id="sc-over-alert" class="sc-over-alert" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- ─── 予算進捗：日次累計 ─── -->
+  <section class="progress-section">
+    <div class="section-hdr">
+      <h2 class="section-title">日次進捗</h2>
+    </div>
+    <div class="daily-swipe-zone" id="daily-month-zone">
+      <span class="swipe-arrow" id="daily-prev-month">&#8249;</span>
+      <span class="swipe-content zone-label-wrap">
+        <span id="daily-month-label">読み込み中...</span>
+        <select id="daily-month-select" class="zone-select-overlay"></select>
+      </span>
+      <span class="swipe-arrow" id="daily-next-month">&#8250;</span>
+    </div>
+    <div class="daily-swipe-zone cat-zone" id="daily-cat-zone">
+      <span class="swipe-arrow" id="daily-cat-prev">&#8249;</span>
+      <span class="swipe-content zone-label-wrap">
+        <span id="daily-cat-label">合計（全カテゴリ）</span>
+        <select id="daily-cat-select" class="zone-select-overlay"></select>
+      </span>
+      <span class="swipe-arrow" id="daily-cat-next">&#8250;</span>
+    </div>
+    <div class="card chart-card progress-chart-card">
+      <div class="chart-wrap"><canvas id="main-cumulative-chart"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ─── 日次マトリクス ─── -->
+  <section class="matrix-section" id="daily-matrix-section">
+    <div class="section-hdr">
+      <h2 class="section-title" id="daily-matrix-title">日次マトリクス</h2>
+      <div class="matrix-legend">
+        <span class="ml ok"><i class="ml-dot"></i>予算内</span>
+        <span class="ml over"><i class="ml-dot"></i>超過</span>
+        <span class="ml none"><i class="ml-dot"></i>支出なし</span>
+      </div>
+    </div>
+    <div class="matrix-wrap">
+      <div class="skeleton-table" id="daily-matrix-skeleton">
+        <div class="sk-row sk-header"></div>
+        <div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div>
+      </div>
+      <div id="daily-matrix-table-wrap" style="overflow-x:auto; display:none"></div>
+    </div>
+  </section>
+
+  <!-- ─── 月間トレンド ─── -->
+  <section class="progress-section">
+    <div class="section-hdr">
+      <h2 class="section-title">月間トレンド</h2>
+      <div id="monthly-chart-stats" class="cumul-stats"></div>
+    </div>
+    <div class="daily-swipe-zone cat-zone" id="trend-cat-zone">
+      <span class="swipe-content zone-label-wrap">
+        <span id="trend-cat-label">合計（全カテゴリ）</span>
+        <select id="trend-cat-select" class="zone-select-overlay"></select>
+      </span>
+    </div>
+    <div class="card chart-card progress-chart-card">
+      <div class="trend-scroll-wrap" id="trend-scroll-wrap">
+        <div class="trend-scroll-inner" id="trend-scroll-inner">
+          <canvas id="monthly-bar-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 年間マトリクス ─── -->
+  <section class="matrix-section">
+    <div class="section-hdr">
+      <h2 class="section-title">カテゴリ × 月 マトリクス（全期間）</h2>
+      <div class="matrix-legend">
+        <span class="ml ok"><i class="ml-dot"></i>予算内</span>
+        <span class="ml warn"><i class="ml-dot"></i>80%超</span>
+        <span class="ml over"><i class="ml-dot"></i>超過</span>
+        <span class="ml none"><i class="ml-dot"></i>予算なし</span>
+        <span class="ml future"><i class="ml-dot"></i>未来月</span>
+      </div>
+    </div>
+    <div class="matrix-wrap" id="matrix-wrap">
+      <div class="skeleton-table" id="matrix-skeleton">
+        <div class="sk-row sk-header"></div>
+        <div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div>
+        <div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div>
+      </div>
+      <table class="matrix-table" id="matrix-table" style="display:none">
+        <thead id="matrix-thead"></thead>
+        <tbody id="matrix-tbody"></tbody>
+        <tfoot id="matrix-tfoot"></tfoot>
+      </table>
+    </div>
+    <p class="matrix-hint">月名 or セルをクリック → 日次詳細を表示</p>
+  </section>
+
+  <!-- ─── ドリルダウン ─── -->
+  <section class="detail-section" id="detail-section" style="display:none">
+    <div class="detail-header">
+      <div class="detail-title-wrap">
+        <h2 class="detail-title" id="detail-month-title">詳細</h2>
+        <span class="detail-badge" id="detail-status-badge"></span>
+      </div>
+      <button class="close-detail" id="close-detail">✕ 閉じる</button>
+    </div>
+    <div id="detail-cat-list" class="detail-cat-list" style="display:none"></div>
+    <div id="detail-cat-chart-wrap" class="detail-cat-chart-wrap" style="display:none">
+      <div class="card chart-card">
+        <div class="chart-hdr">
+          <h3 class="card-title" id="detail-cat-chart-title"></h3>
+          <div id="detail-cat-stats" class="cumul-stats"></div>
+        </div>
+        <div class="chart-wrap"><canvas id="detail-cat-chart"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="trans-hdr">
+        <h3 class="card-title">取引一覧</h3>
+        <span id="trans-count" class="badge-count">0件</span>
+      </div>
+      <div class="trans-wrap">
+        <table class="trans-table">
+          <thead><tr><th>日付</th><th>カテゴリ</th><th>メモ</th><th class="tr">金額</th></tr></thead>
+          <tbody id="trans-tbody"></tbody>
+        </table>
+        <div id="trans-empty" class="trans-empty" style="display:none">取引がありません</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ─── ツールチップ ─── -->
+<div id="matrix-tooltip" class="matrix-tooltip" style="display:none">
+  <div class="tt-header">
+    <span class="tt-dot" id="tt-dot"></span>
+    <span class="tt-cat" id="tt-cat"></span>
+    <span class="tt-month" id="tt-month"></span>
+  </div>
+  <div class="tt-row"><span class="tt-label">支出</span><span class="tt-val expense-text" id="tt-actual"></span></div>
+  <div class="tt-row" id="tt-budget-row"><span class="tt-label">予算</span><span class="tt-val budget-text" id="tt-budget"></span></div>
+  <div class="tt-row" id="tt-diff-row"><span class="tt-label">差額</span><span class="tt-val" id="tt-diff"></span></div>
+  <div class="tt-row" id="tt-pct-row"><span class="tt-label">消化率</span><span class="tt-val" id="tt-pct"></span></div>
+  <div class="tt-row" id="tt-prev-row"><span class="tt-label">前月比</span><span class="tt-val" id="tt-prev"></span></div>
+</div>
+
+<!-- 日次セル取引ポップアップ -->
+<div id="cell-detail-popup" class="cell-popup hidden">
+  <div class="cell-popup-header">
+    <span class="cell-popup-title" id="cell-popup-title"></span>
+    <button class="cell-popup-close" id="cell-popup-close">×</button>
+  </div>
+  <div class="cell-popup-body" id="cell-popup-body"></div>
+</div>
+
+<!-- トースト -->
+<div id="toast" class="toast" style="display:none"></div>
+
+<script src="/static/js/main.js?v={{ ver }}"></script>
+</body>
+</html>
