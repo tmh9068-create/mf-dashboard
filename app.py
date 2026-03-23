@@ -518,14 +518,20 @@ def get_cumulative_data(year, month, category=None):
 
 
 def save_budgets_from_mf(budgets_dict: dict, year: int, month: int):
-    """MFからスクレイプした予算をDBに保存（全月に適用）"""
+    """MFからスクレイプした予算をDBに保存（EARLIEST_YEAR/MONTH から現在まで全月に適用）"""
     conn = get_db()
+    today = date.today()
     for cat, amt in budgets_dict.items():
-        for m in range(1, 13):
+        y, m = EARLIEST_YEAR, EARLIEST_MONTH
+        while (y, m) <= (today.year, today.month):
             conn.execute(
                 'INSERT OR REPLACE INTO budgets (year,month,category,amount) VALUES (?,?,?,?)',
-                (year, m, cat, int(amt))
+                (y, m, cat, int(amt))
             )
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
         conn.execute(
             'INSERT OR IGNORE INTO categories (name,type,color,sort_order) VALUES (?,?,?,?)',
             (cat, 'expense', '#94a3b8', 99)
@@ -800,6 +806,35 @@ def api_transactions():
         ).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
+
+@app.route('/api/upload-csv', methods=['POST'])
+def api_upload_csv():
+    """CSVファイルをアップロードしてDBにインポート"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'file フィールドが必要です'}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({'error': 'ファイルが空です'}), 400
+    filepath = os.path.join(UPLOAD_DIR, 'mf_all.csv')
+    f.save(filepath)
+    try:
+        inserted, skipped = import_csv_to_db(filepath)
+        return jsonify({'status': 'ok', 'inserted': inserted, 'skipped': skipped})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/import-budgets', methods=['POST'])
+def api_import_budgets():
+    """JSON形式で予算をDBにインポート（EARLIEST_YEAR/MONTHから現在まで全月適用）"""
+    data = request.get_json()
+    if not data or 'budgets' not in data:
+        return jsonify({'error': 'budgets フィールドが必要です'}), 400
+    budgets = data['budgets']
+    today = date.today()
+    save_budgets_from_mf(budgets, today.year, today.month)
+    return jsonify({'status': 'ok', 'imported': len(budgets)})
+
 
 @app.route('/api/mf-auto-download', methods=['POST'])
 def api_mf_auto_download():
