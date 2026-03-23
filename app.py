@@ -43,8 +43,8 @@ MF_COL_MAP = {
 EARLIEST_YEAR  = 2023
 EARLIEST_MONTH = 9
 
-# 予算管理対象外カテゴリ
-NO_BUDGET_CATS = {'特別な支出', '現金・カード', 'その他', '税・社会保障', '保険'}
+# 予算管理対象外カテゴリ（集計は行うが予算との比較はしない）
+NO_BUDGET_CATS = {'未分類', '現金・カード', 'その他', '自動車', '特別な支出', '保険', '税・社会保障'}
 
 
 # ─────────────────────────────────────────
@@ -97,29 +97,29 @@ def seed_default_categories():
     count = conn.execute('SELECT COUNT(*) FROM categories').fetchone()[0]
     if count == 0:
         defaults = [
-            # 支出（MoneyForward 大項目）
+            # 支出・予算管理カテゴリ（実データに基づく順序）
             ('食費',         'expense', '#ff5e7d',  1),
             ('日用品',       'expense', '#4ade80',  2),
-            ('衣服・美容',   'expense', '#f472b6',  3),
-            ('健康・医療',   'expense', '#34d399',  4),
+            ('教養・教育',   'expense', '#818cf8',  3),
+            ('衣服・美容',   'expense', '#f472b6',  4),
             ('交通費',       'expense', '#38bdf8',  5),
-            ('通信費',       'expense', '#60a5fa',  6),
-            ('教養・娯楽',   'expense', '#818cf8',  7),
-            ('子育て・教育', 'expense', '#fbbf24',  8),
-            ('水道・光熱費', 'expense', '#ffd166',  9),
-            ('住宅',         'expense', '#a78bfa', 10),
-            ('自動車',       'expense', '#fb923c', 11),
-            ('保険',         'expense', '#94a3b8', 12),
-            ('税・社会保障', 'expense', '#64748b', 13),
-            ('特別な支出',   'expense', '#dc2626', 14),
-            ('現金・カード', 'expense', '#475569', 15),
-            ('その他',       'expense', '#6b7280', 16),
+            ('趣味・娯楽',   'expense', '#fb923c',  6),
+            ('水道・光熱費', 'expense', '#ffd166',  7),
+            ('通信費',       'expense', '#60a5fa',  8),
+            ('健康・医療',   'expense', '#34d399',  9),
+            ('交際費',       'expense', '#c084fc', 10),
+            # 予算外カテゴリ（集計のみ）
+            ('未分類',       'expense', '#64748b', 90),
+            ('現金・カード', 'expense', '#475569', 91),
+            ('その他',       'expense', '#6b7280', 92),
+            ('自動車',       'expense', '#94a3b8', 93),
+            ('特別な支出',   'expense', '#dc2626', 94),
+            ('保険',         'expense', '#94a3b8', 95),
+            ('税・社会保障', 'expense', '#64748b', 96),
             # 収入
-            ('給与・賞与',       'income', '#22d87b',  1),
-            ('事業・副業収入',   'income', '#6c8bff',  2),
-            ('不労所得',         'income', '#ffd166',  3),
-            ('年金・保険収入',   'income', '#34d5d8',  4),
-            ('その他収入',       'income', '#a3e635',  5),
+            ('収入',         'income',  '#22d87b',  1),
+            ('一時所得',     'income',  '#6c8bff',  2),
+            ('その他収入',   'income',  '#a3e635',  3),
         ]
         conn.executemany(
             'INSERT OR IGNORE INTO categories (name,type,color,sort_order) VALUES (?,?,?,?)',
