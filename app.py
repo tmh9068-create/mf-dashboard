@@ -43,8 +43,122 @@ MF_COL_MAP = {
 EARLIEST_YEAR  = 2023
 EARLIEST_MONTH = 9
 
+# ─────────────────────────────────────────
+# MF → Zaim カテゴリマッピング
+# ─────────────────────────────────────────
+# (MF大項目, MF中項目) → Zaim カテゴリ名
+_MF_ZAIM_MAP: dict[tuple[str, str], str] = {
+    # 食費
+    ('食費', '食費'):           '食費',
+    ('食費', '食料品'):         '食費',
+    ('食費', '外食'):           '食費',
+    ('食費', 'カフェ'):         '食費',
+    ('食費', 'その他食費'):     '食費',
+    # 日用品
+    ('日用品', '日用品'):       '日用品',
+    ('日用品', 'ドラッグストア'): '日用品',
+    ('日用品', '子育て用品'):   '子ども',
+    ('日用品', 'ペット用品'):   '日用品',
+    ('日用品', 'その他日用品'): '日用品',
+    # 趣味・娯楽（旅行系は旅行・レジャーへ）
+    ('趣味・娯楽', '旅行'):              '旅行・レジャー',
+    ('趣味・娯楽', 'アウトドア'):        '旅行・レジャー',
+    ('趣味・娯楽', '映画・音楽・ゲーム'): '趣味・娯楽',
+    ('趣味・娯楽', 'その他趣味・娯楽'):  '趣味・娯楽',
+    # 交際費
+    ('交際費', '交際費'):       '交際費',
+    ('交際費', '冠婚葬祭'):     '交際費',
+    ('交際費', 'その他交際費'): '交際費',
+    # 交通費
+    ('交通費', '電車'):         '交通費',
+    ('交通費', 'バス'):         '交通費',
+    ('交通費', 'タクシー'):     '交通費',
+    ('交通費', '飛行機'):       '交通費',
+    ('交通費', '交通費'):       '交通費',
+    ('交通費', 'その他交通費'): '交通費',
+    # 衣服・美容
+    ('衣服・美容', '衣服'):            '衣服・美容',
+    ('衣服・美容', '美容院・理髪'):    '衣服・美容',
+    ('衣服・美容', 'その他衣服・美容'): '衣服・美容',
+    # 健康・医療 → 医療・健康
+    ('健康・医療', '医療費'):          '医療・健康',
+    ('健康・医療', 'ボディケア'):       '医療・健康',
+    ('健康・医療', 'その他健康・医療'): '医療・健康',
+    # 自動車 → 交通費（車両購入のみ特別支出）
+    ('自動車', '道路料金'):     '交通費',
+    ('自動車', 'ガソリン'):     '交通費',
+    ('自動車', '車両'):         '特別支出',
+    ('自動車', 'その他自動車'): '交通費',
+    # 教養・教育 → 教育
+    ('教養・教育', '書籍'):             '教育',
+    ('教養・教育', '新聞・雑誌'):       '教育',
+    ('教養・教育', '習いごと'):         '教育',
+    ('教養・教育', '学費'):             '教育',
+    ('教養・教育', 'その他教養・教育'): '教育',
+    # 特別な支出 → 特別支出
+    ('特別な支出', '家具・家電'):        '特別支出',
+    ('特別な支出', 'その他特別な支出'):  '特別支出',
+    # 現金・カード → その他
+    ('現金・カード', 'ATM引き出し'):        'その他',
+    ('現金・カード', '電子マネー'):         'その他',
+    ('現金・カード', 'カード引き落とし'):    'その他',
+    ('現金・カード', 'その他現金・カード'): 'その他',
+    # 水道・光熱費 → 光熱費
+    ('水道・光熱費', '電気代'):              '光熱費',
+    ('水道・光熱費', 'ガス代'):              '光熱費',
+    ('水道・光熱費', '水道代'):              '光熱費',
+    ('水道・光熱費', 'その他水道・光熱費'):  '光熱費',
+    # 通信費
+    ('通信費', '携帯電話'):       '通信費',
+    ('通信費', 'インターネット'): '通信費',
+    ('通信費', 'その他通信費'):   '通信費',
+    # 保険
+    ('保険', '生命保険'):     '保険',
+    ('保険', '医療保険'):     '保険',
+    ('保険', 'その他保険'):   '保険',
+    # 税・社会保障
+    ('税・社会保障', '税金'):              '税・社会保障',
+    ('税・社会保障', '社会保障'):          '税・社会保障',
+    ('税・社会保障', 'その他税・社会保障'): '税・社会保障',
+    # その他・未分類
+    ('その他', '雑費'):   'その他',
+    ('その他', 'その他'): 'その他',
+    ('未分類', '未分類'): '未分類',
+}
+
+# 大項目のみのフォールバック
+_MF_LARGE_FALLBACK: dict[str, str] = {
+    '食費':         '食費',
+    '日用品':       '日用品',
+    '趣味・娯楽':   '趣味・娯楽',
+    '交際費':       '交際費',
+    '交通費':       '交通費',
+    '衣服・美容':   '衣服・美容',
+    '健康・医療':   '医療・健康',
+    '自動車':       '交通費',
+    '教養・教育':   '教育',
+    '特別な支出':   '特別支出',
+    '現金・カード': 'その他',
+    '水道・光熱費': '光熱費',
+    '通信費':       '通信費',
+    '保険':         '保険',
+    '税・社会保障': '税・社会保障',
+    'その他':       'その他',
+    '未分類':       '未分類',
+    '収入':         '収入',
+    '一時所得':     'その他収入',
+}
+
+def map_to_zaim(mf_large: str, mf_middle: str) -> str:
+    """MF (大項目, 中項目) → Zaim カテゴリ名に変換"""
+    result = _MF_ZAIM_MAP.get((mf_large, mf_middle))
+    if result:
+        return result
+    return _MF_LARGE_FALLBACK.get(mf_large, mf_large)
+
+
 # 予算管理対象外カテゴリ（集計は行うが予算との比較はしない）
-NO_BUDGET_CATS = {'未分類', '現金・カード', 'その他', '自動車', '特別な支出', '保険', '税・社会保障'}
+NO_BUDGET_CATS = {'未分類', 'その他', '特別支出', '保険', '税・社会保障', '旅行・レジャー'}
 
 
 # ─────────────────────────────────────────
@@ -92,34 +206,33 @@ def init_db():
     conn.close()
 
 def seed_default_categories():
-    """MoneyForward 標準カテゴリで初期設定（DBが空の場合のみ）"""
+    """Zaim カテゴリ構造で初期設定（DBが空の場合のみ）"""
     conn = get_db()
     count = conn.execute('SELECT COUNT(*) FROM categories').fetchone()[0]
     if count == 0:
         defaults = [
-            # 支出・予算管理カテゴリ（実データに基づく順序）
-            ('食費',         'expense', '#ff5e7d',  1),
-            ('日用品',       'expense', '#4ade80',  2),
-            ('教養・教育',   'expense', '#818cf8',  3),
-            ('衣服・美容',   'expense', '#f472b6',  4),
-            ('交通費',       'expense', '#38bdf8',  5),
-            ('趣味・娯楽',   'expense', '#fb923c',  6),
-            ('水道・光熱費', 'expense', '#ffd166',  7),
-            ('通信費',       'expense', '#60a5fa',  8),
-            ('健康・医療',   'expense', '#34d399',  9),
-            ('交際費',       'expense', '#c084fc', 10),
+            # 支出・予算管理カテゴリ（Zaim 準拠・実データ出現頻度順）
+            ('食費',           'expense', '#ff5e7d',  1),
+            ('日用品',         'expense', '#4ade80',  2),
+            ('教育',           'expense', '#818cf8',  3),
+            ('衣服・美容',     'expense', '#f472b6',  4),
+            ('交通費',         'expense', '#38bdf8',  5),
+            ('趣味・娯楽',     'expense', '#fb923c',  6),
+            ('光熱費',         'expense', '#ffd166',  7),
+            ('通信費',         'expense', '#60a5fa',  8),
+            ('医療・健康',     'expense', '#34d399',  9),
+            ('交際費',         'expense', '#c084fc', 10),
+            ('子ども',         'expense', '#f9a8d4', 11),
             # 予算外カテゴリ（集計のみ）
-            ('未分類',       'expense', '#64748b', 90),
-            ('現金・カード', 'expense', '#475569', 91),
-            ('その他',       'expense', '#6b7280', 92),
-            ('自動車',       'expense', '#94a3b8', 93),
-            ('特別な支出',   'expense', '#dc2626', 94),
-            ('保険',         'expense', '#94a3b8', 95),
-            ('税・社会保障', 'expense', '#64748b', 96),
+            ('旅行・レジャー', 'expense', '#f97316', 80),
+            ('特別支出',       'expense', '#dc2626', 81),
+            ('保険',           'expense', '#94a3b8', 82),
+            ('税・社会保障',   'expense', '#64748b', 83),
+            ('その他',         'expense', '#6b7280', 84),
+            ('未分類',         'expense', '#475569', 99),
             # 収入
-            ('収入',         'income',  '#22d87b',  1),
-            ('一時所得',     'income',  '#6c8bff',  2),
-            ('その他収入',   'income',  '#a3e635',  3),
+            ('収入',           'income',  '#22d87b',  1),
+            ('その他収入',     'income',  '#a3e635',  2),
         ]
         conn.executemany(
             'INSERT OR IGNORE INTO categories (name,type,color,sort_order) VALUES (?,?,?,?)',
@@ -127,6 +240,24 @@ def seed_default_categories():
         )
         conn.commit()
     conn.close()
+
+
+def auto_import_csv_on_startup():
+    """起動時に transactions が空なら uploads/mf_all.csv を自動インポート"""
+    conn = get_db()
+    count = conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0]
+    conn.close()
+    if count > 0:
+        return
+    csv_path = os.path.join(UPLOAD_DIR, 'mf_all.csv')
+    if not os.path.exists(csv_path):
+        print('[startup] mf_all.csv が見つかりません。スキップします。')
+        return
+    try:
+        inserted, _ = import_csv_to_db(csv_path)
+        print(f'[startup] mf_all.csv を自動インポート: {inserted}件')
+    except Exception as e:
+        print(f'[startup] CSV インポートエラー: {e}')
 
 
 # ─────────────────────────────────────────
@@ -171,15 +302,18 @@ def parse_mf_csv(filepath):
         memo = ' '.join(p for p in memo_parts if p and p != 'nan')
         dt   = row['date'].strftime('%Y-%m-%d')
 
-        if not cat or cat in ('nan', ''):
+        mf_large  = cat
+        mf_middle = str(row.get('subcategory', '')).strip()
+        if mf_middle in ('nan', ''): mf_middle = ''
+        zaim_cat = map_to_zaim(mf_large, mf_middle)
+
+        if not zaim_cat or zaim_cat in ('nan', ''):
             continue
 
         if raw_amount < 0:
-            # 負の金額 → 支出
-            rows.append(('expense', cat, int(abs(raw_amount)), memo, dt))
+            rows.append(('expense', zaim_cat, int(abs(raw_amount)), memo, dt))
         elif raw_amount > 0:
-            # 正の金額 → 収入
-            rows.append(('income', cat, int(raw_amount), memo, dt))
+            rows.append(('income', zaim_cat, int(raw_amount), memo, dt))
 
     return rows
 
@@ -1054,6 +1188,7 @@ def _setup_line_on_startup(public_url: str):
 
 init_db()
 seed_default_categories()
+auto_import_csv_on_startup()
 
 _is_gunicorn = 'gunicorn' in os.getenv('SERVER_SOFTWARE', '') or not __name__ == '__main__'
 if _is_gunicorn and os.getenv('RAILWAY_ENVIRONMENT'):

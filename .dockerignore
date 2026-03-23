@@ -1,0 +1,20 @@
+.git
+.env
+__pycache__/
+*.pyc
+*.db-wal
+*.db-shm
+uploads/*.png
+uploads/*.html
+uploads/otp.txt
+# ダウンロード系スクリプト（本番不要）
+analyze_mf.py
+mf_downloader.py
+setup_rules*.py
+check_category_ids.py
+inspect_rule_detail.py
+find_endpoint.py
+find_selects.py
+map_categories.py
+parse_html*.py
+tmp_analyze.py
