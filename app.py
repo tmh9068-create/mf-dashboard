@@ -368,7 +368,7 @@ def import_csv_to_db(filepath):
             new_cats
         )
 
-    # 対象年のみ削除（他の年は保持）
+    # 対象年のみ MF データを削除して入れ替え（他の年は保持）
     placeholders = ','.join('?' * len(years_in_csv))
     prev_count = conn.execute(
         f"SELECT COUNT(*) FROM transactions WHERE source='mf' AND substr(date,1,4) IN ({placeholders})",
@@ -382,6 +382,27 @@ def import_csv_to_db(filepath):
         'INSERT INTO transactions (type,category,amount,memo,date,source,created_at) VALUES (?,?,?,?,?,?,?)',
         [(t, c, a, m, d, 'mf', now) for t, c, a, m, d in rows]
     )
+
+    # MF 更新後、同じ年の Zaim 重複レコードを削除（MFと date+amount+type が一致するもの）
+    new_mf_keys = {
+        (r['date'], r['amount'], r['type'])
+        for r in conn.execute(
+            f"SELECT date, amount, type FROM transactions WHERE source='mf' AND substr(date,1,4) IN ({placeholders})",
+            years_in_csv
+        )
+    }
+    zaim_dup_ids = [
+        r['id'] for r in conn.execute(
+            f"SELECT id, date, amount, type FROM transactions WHERE source='zaim' AND substr(date,1,4) IN ({placeholders})",
+            years_in_csv
+        )
+        if (r['date'], r['amount'], r['type']) in new_mf_keys
+    ]
+    if zaim_dup_ids:
+        conn.execute(
+            f"DELETE FROM transactions WHERE id IN ({','.join('?' * len(zaim_dup_ids))})",
+            zaim_dup_ids
+        )
 
     conn.commit()
     conn.close()
