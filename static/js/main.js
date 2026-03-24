@@ -1515,8 +1515,8 @@ async function handleMfCsvUpload(event) {
     const res  = await fetch('/api/upload-csv', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '失敗');
-    const yearsMsg = data.years ? ` (${data.years.join('・')}年分)` : '';
-    showToast(`MF更新完了: ${data.inserted}件インポート${yearsMsg}`, 'success');
+    const rangeMsg = (data.date_min && data.date_max) ? ` (${data.date_min}〜${data.date_max})` : '';
+    showToast(`MF更新完了: ${data.inserted}件インポート${rangeMsg}`, 'success');
     await refreshAll();
   } catch (err) {
     showToast(`MF更新エラー: ${err.message}`, 'error');

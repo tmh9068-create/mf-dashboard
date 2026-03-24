@@ -348,8 +348,10 @@ def import_csv_to_db(filepath):
     if not rows:
         return 0, 0
 
-    # CSV に含まれる年を特定
-    years_in_csv = sorted({r[4][:4] for r in rows})  # r[4] = date 'YYYY-MM-DD'
+    # CSV に含まれる日付範囲を特定（年単位ではなく正確な min〜max）
+    dates = [r[4] for r in rows]  # r[4] = 'YYYY-MM-DD'
+    date_min = min(dates)
+    date_max = max(dates)
 
     conn = get_db()
     now = datetime.now().isoformat()
@@ -366,33 +368,32 @@ def import_csv_to_db(filepath):
             new_cats
         )
 
-    # 対象年のみ MF データを削除して入れ替え（他の年は保持）
-    placeholders = ','.join('?' * len(years_in_csv))
+    # 対象期間のみ MF データを削除して入れ替え（期間外は保持）
     prev_count = conn.execute(
-        f"SELECT COUNT(*) FROM transactions WHERE source='mf' AND substr(date,1,4) IN ({placeholders})",
-        years_in_csv
+        "SELECT COUNT(*) FROM transactions WHERE source='mf' AND date BETWEEN ? AND ?",
+        (date_min, date_max)
     ).fetchone()[0]
     conn.execute(
-        f"DELETE FROM transactions WHERE source='mf' AND substr(date,1,4) IN ({placeholders})",
-        years_in_csv
+        "DELETE FROM transactions WHERE source='mf' AND date BETWEEN ? AND ?",
+        (date_min, date_max)
     )
     conn.executemany(
         'INSERT INTO transactions (type,category,amount,memo,date,source,created_at) VALUES (?,?,?,?,?,?,?)',
         [(t, c, a, m, d, 'mf', now) for t, c, a, m, d in rows]
     )
 
-    # MF 更新後、同じ年の Zaim 重複レコードを削除（MFと date+amount+type が一致するもの）
+    # MF 更新後、同じ期間の Zaim 重複レコードを削除（date+amount+type が一致するもの）
     new_mf_keys = {
         (r['date'], r['amount'], r['type'])
         for r in conn.execute(
-            f"SELECT date, amount, type FROM transactions WHERE source='mf' AND substr(date,1,4) IN ({placeholders})",
-            years_in_csv
+            "SELECT date, amount, type FROM transactions WHERE source='mf' AND date BETWEEN ? AND ?",
+            (date_min, date_max)
         )
     }
     zaim_dup_ids = [
         r['id'] for r in conn.execute(
-            f"SELECT id, date, amount, type FROM transactions WHERE source='zaim' AND substr(date,1,4) IN ({placeholders})",
-            years_in_csv
+            "SELECT id, date, amount, type FROM transactions WHERE source='zaim' AND date BETWEEN ? AND ?",
+            (date_min, date_max)
         )
         if (r['date'], r['amount'], r['type']) in new_mf_keys
     ]
@@ -1139,7 +1140,7 @@ def api_transactions():
 
 @app.route('/api/upload-csv', methods=['POST'])
 def api_upload_csv():
-    """MF CSVをアップロード（含まれる年のみ置き換え・他の年のデータは維持）"""
+    """MF CSVをアップロード（CSV の日付範囲のみ置き換え・それ以外のデータは維持）"""
     if 'file' not in request.files:
         return jsonify({'error': 'file フィールドが必要です'}), 400
     f = request.files['file']
@@ -1149,13 +1150,16 @@ def api_upload_csv():
     f.save(filepath)
     try:
         rows = parse_mf_csv(filepath)
-        years = sorted({r[4][:4] for r in rows})
+        dates = [r[4] for r in rows]
+        date_min = min(dates)
+        date_max = max(dates)
         inserted, replaced = import_csv_to_db(filepath)
         return jsonify({
             'status':   'ok',
             'inserted': inserted,
             'replaced': replaced,
-            'years':    years,
+            'date_min': date_min,
+            'date_max': date_max,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
