@@ -1,13 +1,59 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from dotenv import load_dotenv
-import sqlite3, os, calendar
+import sqlite3, os, calendar, hashlib, hmac
 from datetime import datetime, date
+from functools import wraps
 import pandas as pd
 
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'mf-dashboard-2026'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'mf-dashboard-2026-change-me')
+
+# ─────────────────────────────────────────
+# HTTPS 強制リダイレクト（リバースプロキシ経由の場合）
+# ─────────────────────────────────────────
+@app.before_request
+def force_https():
+    proto = request.headers.get('X-Forwarded-Proto', '')
+    if proto == 'http':
+        url = request.url.replace('http://', 'https://', 1)
+        return redirect(url, code=301)
+
+# ─────────────────────────────────────────
+# パスワード認証
+# ─────────────────────────────────────────
+LOGIN_PASSWORD = os.getenv('LOGIN_PASSWORD', '')
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not LOGIN_PASSWORD:
+            return f(*args, **kwargs)  # パスワード未設定時は認証スキップ
+        if not session.get('authenticated'):
+            if request.path.startswith('/api/'):
+                return jsonify({'error': '認証が必要です'}), 401
+            return redirect(url_for('login', next=request.path))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        pw = request.form.get('password', '')
+        if LOGIN_PASSWORD and hmac.compare_digest(pw, LOGIN_PASSWORD):
+            session['authenticated'] = True
+            session.permanent = True
+            next_url = request.args.get('next', '/')
+            return redirect(next_url)
+        error = 'パスワードが違います'
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 _BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR  = os.getenv('DATA_DIR', '')
@@ -1054,40 +1100,48 @@ import time as _time
 _STATIC_VER = str(int(_time.time()))
 
 @app.route('/')
+@login_required
 def index():
     today = date.today()
     return render_template('index.html', year=today.year, month=today.month, ver=_STATIC_VER)
 
 @app.route('/api/daily-matrix')
+@login_required
 def api_daily_matrix():
     today = date.today()
     return jsonify(get_daily_matrix(int(request.args.get('year', today.year)),
                                     int(request.args.get('month', today.month))))
 
 @app.route('/api/monthly-trend')
+@login_required
 def api_monthly_trend():
     return jsonify(get_monthly_trend(request.args.get('category') or None))
 
 @app.route('/api/yearly-matrix')
+@login_required
 def api_yearly_matrix():
     return jsonify(get_yearly_matrix())
 
 @app.route('/api/summary')
+@login_required
 def api_summary():
     return jsonify(get_monthly_summary(int(request.args.get('year', date.today().year)),
                                        int(request.args.get('month', date.today().month))))
 
 @app.route('/api/budget-progress')
+@login_required
 def api_budget_progress():
     return jsonify(get_budget_progress(int(request.args.get('year', date.today().year)),
                                        int(request.args.get('month', date.today().month))))
 
 @app.route('/api/daily')
+@login_required
 def api_daily():
     return jsonify(get_daily_data(int(request.args.get('year', date.today().year)),
                                   int(request.args.get('month', date.today().month))))
 
 @app.route('/api/cumulative')
+@login_required
 def api_cumulative():
     year     = int(request.args.get('year',  date.today().year))
     month    = int(request.args.get('month', date.today().month))
@@ -1095,6 +1149,7 @@ def api_cumulative():
     return jsonify(get_cumulative_data(year, month, category if category else None))
 
 @app.route('/api/categories')
+@login_required
 def api_categories():
     conn = get_db()
     rows = conn.execute('''
@@ -1120,6 +1175,7 @@ def api_categories():
     return jsonify(result)
 
 @app.route('/api/transactions')
+@login_required
 def api_transactions():
     year     = int(request.args.get('year',  date.today().year))
     month    = int(request.args.get('month', date.today().month))
@@ -1141,6 +1197,7 @@ def api_transactions():
     return jsonify([dict(r) for r in rows])
 
 @app.route('/api/upload-csv', methods=['POST'])
+@login_required
 def api_upload_csv():
     """MF CSVをアップロード（CSV の日付範囲のみ置き換え・それ以外のデータは維持）"""
     if 'file' not in request.files:
@@ -1168,6 +1225,7 @@ def api_upload_csv():
 
 
 @app.route('/api/upload-zaim-csv', methods=['POST'])
+@login_required
 def api_upload_zaim_csv():
     """Zaim CSV をアップロードして MF と重複しない取引を追加"""
     if 'file' not in request.files:
@@ -1185,6 +1243,7 @@ def api_upload_zaim_csv():
 
 
 @app.route('/api/sync-from-kakeibo', methods=['POST'])
+@login_required
 def api_sync_from_kakeibo():
     """kakeibo.db から Zaim データを直接同期（同一サーバー環境のみ）"""
     kakeibo_db = os.getenv(
@@ -1216,6 +1275,7 @@ def api_sync_from_kakeibo():
 
 
 @app.route('/api/import-budgets', methods=['POST'])
+@login_required
 def api_import_budgets():
     """JSON形式で予算をDBにインポート（EARLIEST_YEAR/MONTHから現在まで全月適用）"""
     data = request.get_json()
@@ -1228,6 +1288,7 @@ def api_import_budgets():
 
 
 @app.route('/api/mf-auto-download', methods=['POST'])
+@login_required
 def api_mf_auto_download():
     """MoneyForward同期をバックグラウンドで実行"""
     try:

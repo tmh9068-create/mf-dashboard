@@ -107,6 +107,15 @@ body {
 .btn-secondary:hover { border-color: #34d399; box-shadow: 0 0 10px rgba(52,211,153,.25); }
 .btn-secondary:disabled { opacity: .4; cursor: not-allowed; }
 .btn-secondary.running { animation: shimmer-btn 1.2s infinite; }
+.btn-logout {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; border-radius: 50%;
+  background: transparent; border: 1px solid #475569;
+  color: #94a3b8; font-size: .9rem; text-decoration: none;
+  transition: border-color .2s, color .2s;
+  margin-left: .25rem;
+}
+.btn-logout:hover { border-color: #ef4444; color: #ef4444; }
 .source-badge {
   display: inline-block; font-size: .65rem; font-weight: 700;
   padding: 1px 5px; border-radius: 4px; letter-spacing: .03em;
