@@ -9,7 +9,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'mf-dashboard-2026'
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading', allow_upgrades=False)
 
 _BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR  = os.getenv('DATA_DIR', '')

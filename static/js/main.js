@@ -110,7 +110,7 @@ async function loadCategories() {
    WebSocket
 ────────────────────────────────────── */
 function setupSocket() {
-  socket = io();
+  socket = io({ transports: ['polling'] });
   socket.on('connect',      () => setLive(true));
   socket.on('disconnect',   () => setLive(false));
   socket.on('data_updated', () => refreshAll());
