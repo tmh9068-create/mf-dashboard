@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: mf-dashboard
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter          # $7/month — 永続ディスク＆スリープなし
+    healthCheckPath: /
+
+    disk:
+      name: mf-data
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      # 以下は Render ダッシュボードで手動設定（機密情報のため yaml には書かない）
+      # - key: MF_EMAIL
+      # - key: MF_PASSWORD
+      # - key: LINE_CHANNEL_ACCESS_TOKEN
+      # - key: LINE_CHANNEL_SECRET
+      # - key: LINE_USER_ID

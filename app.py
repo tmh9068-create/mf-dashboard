@@ -9,7 +9,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'mf-dashboard-2026'
-socketio = SocketIO(app, cors_allowed_origins='*')
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
 
 _BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR  = os.getenv('DATA_DIR', '')
@@ -44,108 +44,125 @@ EARLIEST_YEAR  = 2023
 EARLIEST_MONTH = 9
 
 # ─────────────────────────────────────────
-# MF → Zaim カテゴリマッピング
+# MF → kakeibo カテゴリマッピング
 # ─────────────────────────────────────────
-# (MF大項目, MF中項目) → Zaim カテゴリ名
+# (MF大項目, MF中項目) → kakeibo カテゴリ名
 _MF_ZAIM_MAP: dict[tuple[str, str], str] = {
-    # 食費
-    ('食費', '食費'):           '食費',
-    ('食費', '食料品'):         '食費',
-    ('食費', '外食'):           '食費',
-    ('食費', 'カフェ'):         '食費',
-    ('食費', 'その他食費'):     '食費',
+    # 食費 → スーパー / 外食（パパ昼食はメモルールで後処理）
+    ('食費', '食費'):           'スーパー',
+    ('食費', '食料品'):         'スーパー',
+    ('食費', '外食'):           '外食',
+    ('食費', 'カフェ'):         '外食',
+    ('食費', 'その他食費'):     '外食',
     # 日用品
-    ('日用品', '日用品'):       '日用品',
+    ('日用品', '日用品'):         '日用品',
     ('日用品', 'ドラッグストア'): '日用品',
-    ('日用品', '子育て用品'):   '子ども',
-    ('日用品', 'ペット用品'):   '日用品',
-    ('日用品', 'その他日用品'): '日用品',
-    # 趣味・娯楽（旅行系は旅行・レジャーへ）
-    ('趣味・娯楽', '旅行'):              '旅行・レジャー',
-    ('趣味・娯楽', 'アウトドア'):        '旅行・レジャー',
-    ('趣味・娯楽', '映画・音楽・ゲーム'): '趣味・娯楽',
-    ('趣味・娯楽', 'その他趣味・娯楽'):  '趣味・娯楽',
+    ('日用品', '子育て用品'):     'レオ',
+    ('日用品', 'ペット用品'):     '日用品',
+    ('日用品', 'その他日用品'):   '日用品',
+    # 趣味・娯楽
+    ('趣味・娯楽', '旅行'):               'レジャー',
+    ('趣味・娯楽', 'アウトドア'):         'レジャー',
+    ('趣味・娯楽', '映画・音楽・ゲーム'): '小遣い',
+    ('趣味・娯楽', 'その他趣味・娯楽'):   '小遣い',
+    ('趣味・娯楽', 'スポーツ'):           '小遣い',
     # 交際費
-    ('交際費', '交際費'):       '交際費',
-    ('交際費', '冠婚葬祭'):     '交際費',
-    ('交際費', 'その他交際費'): '交際費',
+    ('交際費', '交際費'):         '交際費',
+    ('交際費', 'プレゼント代'):   '交際費',
+    ('交際費', '冠婚葬祭'):       '交際費',
+    ('交際費', 'その他交際費'):   '交際費',
     # 交通費
-    ('交通費', '電車'):         '交通費',
-    ('交通費', 'バス'):         '交通費',
-    ('交通費', 'タクシー'):     '交通費',
-    ('交通費', '飛行機'):       '交通費',
-    ('交通費', '交通費'):       '交通費',
-    ('交通費', 'その他交通費'): '交通費',
-    # 衣服・美容
-    ('衣服・美容', '衣服'):            '衣服・美容',
-    ('衣服・美容', '美容院・理髪'):    '衣服・美容',
-    ('衣服・美容', 'その他衣服・美容'): '衣服・美容',
-    # 健康・医療 → 医療・健康
-    ('健康・医療', '医療費'):          '医療・健康',
-    ('健康・医療', 'ボディケア'):       '医療・健康',
-    ('健康・医療', 'その他健康・医療'): '医療・健康',
-    # 自動車 → 交通費（車両購入のみ特別支出）
-    ('自動車', '道路料金'):     '交通費',
-    ('自動車', 'ガソリン'):     '交通費',
-    ('自動車', '車両'):         '特別支出',
-    ('自動車', 'その他自動車'): '交通費',
-    # 教養・教育 → 教育
-    ('教養・教育', '書籍'):             '教育',
-    ('教養・教育', '新聞・雑誌'):       '教育',
-    ('教養・教育', '習いごと'):         '教育',
-    ('教養・教育', '学費'):             '教育',
-    ('教養・教育', 'その他教養・教育'): '教育',
-    # 特別な支出 → 特別支出
-    ('特別な支出', '家具・家電'):        '特別支出',
-    ('特別な支出', 'その他特別な支出'):  '特別支出',
-    # 現金・カード → その他
-    ('現金・カード', 'ATM引き出し'):        'その他',
-    ('現金・カード', '電子マネー'):         'その他',
-    ('現金・カード', 'カード引き落とし'):    'その他',
-    ('現金・カード', 'その他現金・カード'): 'その他',
-    # 水道・光熱費 → 光熱費
-    ('水道・光熱費', '電気代'):              '光熱費',
-    ('水道・光熱費', 'ガス代'):              '光熱費',
-    ('水道・光熱費', '水道代'):              '光熱費',
-    ('水道・光熱費', 'その他水道・光熱費'):  '光熱費',
-    # 通信費
-    ('通信費', '携帯電話'):       '通信費',
-    ('通信費', 'インターネット'): '通信費',
-    ('通信費', 'その他通信費'):   '通信費',
-    # 保険
-    ('保険', '生命保険'):     '保険',
-    ('保険', '医療保険'):     '保険',
-    ('保険', 'その他保険'):   '保険',
-    # 税・社会保障
-    ('税・社会保障', '税金'):              '税・社会保障',
-    ('税・社会保障', '社会保障'):          '税・社会保障',
-    ('税・社会保障', 'その他税・社会保障'): '税・社会保障',
+    ('交通費', '電車'):           '交通',
+    ('交通費', 'バス'):           '交通',
+    ('交通費', 'タクシー'):       '交通',
+    ('交通費', '飛行機'):         '交通',
+    ('交通費', '交通費'):         '交通',
+    ('交通費', 'その他交通費'):   '交通',
+    # 衣服・美容 → 衣服 / 美容
+    ('衣服・美容', '衣服'):             '衣服',
+    ('衣服・美容', '美容院・理髪'):     '美容',
+    ('衣服・美容', 'その他衣服・美容'): '美容',
+    ('衣服・美容', 'クリーニング'):     '美容',
+    # 健康・医療
+    ('健康・医療', '医療費'):           '日用品',
+    ('健康・医療', '薬'):               '日用品',
+    ('健康・医療', 'ボディケア'):        '美容',
+    ('健康・医療', 'フィットネス'):      '小遣い',
+    ('健康・医療', 'その他健康・医療'):  '日用品',
+    # 自動車
+    ('自動車', '道路料金'):       '交通',
+    ('自動車', 'ガソリン'):       '交通',
+    ('自動車', '駐車場'):         '交通',
+    ('自動車', '車両'):           '高額支出(10万以上)',
+    ('自動車', 'その他自動車'):   '交通',
+    # 教養・教育 → 学費 / 小遣い
+    ('教養・教育', '習いごと'):           '学費',
+    ('教養・教育', '学費'):               '学費',
+    ('教養・教育', 'その他教養・教育'):   '学費',
+    ('教養・教育', '書籍'):               '小遣い',
+    ('教養・教育', '新聞・雑誌'):         '小遣い',
+    # 特別な支出
+    ('特別な支出', '家具・家電'):          '高額支出(10万以上)',
+    ('特別な支出', '住宅・リフォーム'):    '高額支出(10万以上)',
+    ('特別な支出', 'その他特別な支出'):    '高額支出(10万以上)',
+    # 現金・カード → 未分類（二重計上リスクあり）
+    ('現金・カード', 'ATM引き出し'):        '未分類',
+    ('現金・カード', '電子マネー'):         '未分類',
+    ('現金・カード', 'カード引き落とし'):   '未分類',
+    ('現金・カード', 'その他現金・カード'): '未分類',
+    # 水道・光熱費 → 電気 / ガス / 水道
+    ('水道・光熱費', '電気代'):             '電気',
+    ('水道・光熱費', 'ガス代'):             'ガス',
+    ('水道・光熱費', 'ガス・灯油代'):       'ガス',
+    ('水道・光熱費', '水道代'):             '水道',
+    ('水道・光熱費', 'その他水道・光熱費'): '固定費',
+    # 通信費 → 固定費
+    ('通信費', '携帯電話'):       '固定費',
+    ('通信費', 'インターネット'): '固定費',
+    ('通信費', 'その他通信費'):   '固定費',
+    ('通信費', '有料サービス'):   '固定費',
+    ('通信費', '放送視聴費'):     '固定費',
+    # 保険 → 固定費
+    ('保険', '生命保険'):   '固定費',
+    ('保険', '医療保険'):   '固定費',
+    ('保険', 'その他保険'): '固定費',
+    # 税・社会保障 → 未分類
+    ('税・社会保障', '税金'):               '未分類',
+    ('税・社会保障', '社会保障'):           '未分類',
+    ('税・社会保障', '所得税・住民税'):     '未分類',
+    ('税・社会保障', 'その他税・社会保障'): '未分類',
     # その他・未分類
-    ('その他', '雑費'):   'その他',
-    ('その他', 'その他'): 'その他',
-    ('未分類', '未分類'): '未分類',
+    ('その他', '雑費'):        '未分類',
+    ('その他', '事業経費'):    '未分類',
+    ('その他', 'その他'):      '未分類',
+    ('未分類', '未分類'):      '未分類',
+    # 収入
+    ('収入', '給与'):          '給与所得',
+    ('収入', '一時所得'):      'その他収入',
+    ('収入', 'その他の収入'):  'その他収入',
+    ('収入', 'その他収入'):    'その他収入',
 }
 
 # 大項目のみのフォールバック
 _MF_LARGE_FALLBACK: dict[str, str] = {
-    '食費':         '食費',
+    '食費':         'スーパー',
     '日用品':       '日用品',
-    '趣味・娯楽':   '趣味・娯楽',
+    '趣味・娯楽':   '小遣い',
     '交際費':       '交際費',
-    '交通費':       '交通費',
-    '衣服・美容':   '衣服・美容',
-    '健康・医療':   '医療・健康',
-    '自動車':       '交通費',
-    '教養・教育':   '教育',
-    '特別な支出':   '特別支出',
-    '現金・カード': 'その他',
-    '水道・光熱費': '光熱費',
-    '通信費':       '通信費',
-    '保険':         '保険',
-    '税・社会保障': '税・社会保障',
-    'その他':       'その他',
+    '交通費':       '交通',
+    '衣服・美容':   '美容',
+    '健康・医療':   '日用品',
+    '自動車':       '交通',
+    '教養・教育':   '学費',
+    '特別な支出':   '高額支出(10万以上)',
+    '現金・カード': '未分類',
+    '水道・光熱費': '固定費',
+    '通信費':       '固定費',
+    '保険':         '固定費',
+    '税・社会保障': '未分類',
+    'その他':       '未分類',
     '未分類':       '未分類',
-    '収入':         '収入',
+    '収入':         'その他収入',
     '一時所得':     'その他収入',
 }
 
@@ -157,8 +174,8 @@ def map_to_zaim(mf_large: str, mf_middle: str) -> str:
     return _MF_LARGE_FALLBACK.get(mf_large, mf_large)
 
 
-# 予算管理対象外カテゴリ（集計は行うが予算との比較はしない）
-NO_BUDGET_CATS = {'未分類', 'その他', '特別支出', '保険', '税・社会保障', '旅行・レジャー'}
+# 予算管理対象外カテゴリ（kakeibo 準拠）
+NO_BUDGET_CATS = {'交通', '高額支出(10万以上)', '交際費', '未分類', 'レジャー'}
 
 
 # ─────────────────────────────────────────
@@ -185,7 +202,9 @@ def init_db():
         )''')
     existing_cols = [row[1] for row in conn.execute('PRAGMA table_info(transactions)').fetchall()]
     if 'source' not in existing_cols:
-        conn.execute("ALTER TABLE transactions ADD COLUMN source TEXT DEFAULT 'csv'")
+        conn.execute("ALTER TABLE transactions ADD COLUMN source TEXT DEFAULT 'mf'")
+    # 旧 source='csv' を 'mf' に移行
+    conn.execute("UPDATE transactions SET source='mf' WHERE source='csv'")
     conn.execute('''
         CREATE TABLE IF NOT EXISTS budgets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -206,39 +225,40 @@ def init_db():
     conn.close()
 
 def seed_default_categories():
-    """Zaim カテゴリ構造で初期設定（DBが空の場合のみ）"""
+    """kakeibo 準拠のカテゴリで初期設定"""
     conn = get_db()
-    count = conn.execute('SELECT COUNT(*) FROM categories').fetchone()[0]
-    if count == 0:
-        defaults = [
-            # 支出・予算管理カテゴリ（Zaim 準拠・実データ出現頻度順）
-            ('食費',           'expense', '#ff5e7d',  1),
-            ('日用品',         'expense', '#4ade80',  2),
-            ('教育',           'expense', '#818cf8',  3),
-            ('衣服・美容',     'expense', '#f472b6',  4),
-            ('交通費',         'expense', '#38bdf8',  5),
-            ('趣味・娯楽',     'expense', '#fb923c',  6),
-            ('光熱費',         'expense', '#ffd166',  7),
-            ('通信費',         'expense', '#60a5fa',  8),
-            ('医療・健康',     'expense', '#34d399',  9),
-            ('交際費',         'expense', '#c084fc', 10),
-            ('子ども',         'expense', '#f9a8d4', 11),
-            # 予算外カテゴリ（集計のみ）
-            ('旅行・レジャー', 'expense', '#f97316', 80),
-            ('特別支出',       'expense', '#dc2626', 81),
-            ('保険',           'expense', '#94a3b8', 82),
-            ('税・社会保障',   'expense', '#64748b', 83),
-            ('その他',         'expense', '#6b7280', 84),
-            ('未分類',         'expense', '#475569', 99),
-            # 収入
-            ('収入',           'income',  '#22d87b',  1),
-            ('その他収入',     'income',  '#a3e635',  2),
-        ]
-        conn.executemany(
-            'INSERT OR IGNORE INTO categories (name,type,color,sort_order) VALUES (?,?,?,?)',
-            defaults
-        )
-        conn.commit()
+    # 既存カテゴリをすべて削除して再登録（マッピング変更時に確実に反映）
+    conn.execute('DELETE FROM categories')
+    defaults = [
+        # 支出・予算管理カテゴリ（kakeibo 準拠・予算額降順）
+        ('スーパー',           'expense', '#ff5e7d',  1),
+        ('外食',               'expense', '#f97316',  2),
+        ('学費',               'expense', '#818cf8',  3),
+        ('固定費',             'expense', '#60a5fa',  4),
+        ('小遣い',             'expense', '#fb923c',  5),
+        ('美容',               'expense', '#f472b6',  6),
+        ('日用品',             'expense', '#4ade80',  7),
+        ('パパ昼食',           'expense', '#ffd166',  8),
+        ('水道',               'expense', '#38bdf8',  9),
+        ('レオ',               'expense', '#f9a8d4', 10),
+        ('衣服',               'expense', '#c084fc', 11),
+        ('電気',               'expense', '#fbbf24', 12),
+        ('ガス',               'expense', '#fb7185', 13),
+        # 予算外カテゴリ（集計のみ・kakeibo 準拠）
+        ('交通',               'expense', '#38bdf8', 80),
+        ('レジャー',           'expense', '#f97316', 81),
+        ('交際費',             'expense', '#c084fc', 82),
+        ('高額支出(10万以上)', 'expense', '#dc2626', 83),
+        ('未分類',             'expense', '#475569', 99),
+        # 収入
+        ('給与所得',           'income',  '#22d87b',  1),
+        ('その他収入',         'income',  '#a3e635',  2),
+    ]
+    conn.executemany(
+        'INSERT OR IGNORE INTO categories (name,type,color,sort_order) VALUES (?,?,?,?)',
+        defaults
+    )
+    conn.commit()
     conn.close()
 
 
@@ -310,6 +330,12 @@ def parse_mf_csv(filepath):
         if not zaim_cat or zaim_cat in ('nan', ''):
             continue
 
+        # パパ昼食：外食カテゴリでメモに昼食キーワードを含む場合
+        if zaim_cat == '外食':
+            memo_lower = memo.lower()
+            if any(kw in memo_lower for kw in ['昼食', 'ランチ', 'lunch', 'お昼', '昼ご飯', '昼ごはん', '昼めし']):
+                zaim_cat = 'パパ昼食'
+
         if raw_amount < 0:
             rows.append(('expense', zaim_cat, int(abs(raw_amount)), memo, dt))
         elif raw_amount > 0:
@@ -319,7 +345,14 @@ def parse_mf_csv(filepath):
 
 
 def import_csv_to_db(filepath):
+    """MF CSVをインポート（CSVに含まれる年のみ source='mf' を置き換え、他の年は維持）"""
     rows = parse_mf_csv(filepath)
+    if not rows:
+        return 0, 0
+
+    # CSV に含まれる年を特定
+    years_in_csv = sorted({r[4][:4] for r in rows})  # r[4] = date 'YYYY-MM-DD'
+
     conn = get_db()
     now = datetime.now().isoformat()
 
@@ -335,18 +368,151 @@ def import_csv_to_db(filepath):
             new_cats
         )
 
-    prev_count = conn.execute("SELECT COUNT(*) FROM transactions WHERE source='csv'").fetchone()[0]
-    conn.execute("DELETE FROM transactions WHERE source='csv'")
+    # 対象年のみ削除（他の年は保持）
+    placeholders = ','.join('?' * len(years_in_csv))
+    prev_count = conn.execute(
+        f"SELECT COUNT(*) FROM transactions WHERE source='mf' AND substr(date,1,4) IN ({placeholders})",
+        years_in_csv
+    ).fetchone()[0]
+    conn.execute(
+        f"DELETE FROM transactions WHERE source='mf' AND substr(date,1,4) IN ({placeholders})",
+        years_in_csv
+    )
     conn.executemany(
         'INSERT INTO transactions (type,category,amount,memo,date,source,created_at) VALUES (?,?,?,?,?,?,?)',
-        [(t, c, a, m, d, 'csv', now) for t, c, a, m, d in rows]
+        [(t, c, a, m, d, 'mf', now) for t, c, a, m, d in rows]
     )
-    inserted = len(rows)
-    skipped  = prev_count
 
     conn.commit()
     conn.close()
-    return inserted, skipped
+    return len(rows), prev_count
+
+
+# ─────────────────────────────────────────
+# Zaim CSV インポート
+# ─────────────────────────────────────────
+ZAIM_COL_MAP = {
+    '日付':     'date',
+    '方向':     'direction',
+    'カテゴリ': 'category',
+    '品目':     'item',
+    'メモ':     'note',
+    'お店':     'shop',
+    '通貨':     'currency',
+    '収入':     'income_amt',
+    '支出':     'expense_amt',
+    '振替':     'is_transfer',
+    '残高調整': 'is_adjust',
+    '集計の設定': 'include_flag',
+}
+
+def parse_zaim_csv(filepath):
+    """Zaim CSV をパースしてトランザクション行リストを返す"""
+    df = None
+    for enc in ['utf-8-sig', 'utf-8', 'cp932']:
+        try:
+            df = pd.read_csv(filepath, encoding=enc)
+            break
+        except Exception:
+            continue
+    if df is None:
+        raise ValueError('Zaim CSV 読み込み失敗')
+
+    df = df.rename(columns={c: ZAIM_COL_MAP[c] for c in df.columns if c in ZAIM_COL_MAP})
+
+    # 振替・残高調整を除外
+    if 'is_transfer' in df.columns:
+        df = df[df['is_transfer'].astype(str).str.strip().isin(['0', ''])]
+    if 'is_adjust' in df.columns:
+        df = df[df['is_adjust'].astype(str).str.strip().isin(['0', ''])]
+
+    # 集計しない設定を除外
+    if 'include_flag' in df.columns:
+        df = df[~df['include_flag'].astype(str).str.contains('含めない', na=False)]
+
+    # 2023年9月以降のみ
+    df['date'] = pd.to_datetime(df.get('date', pd.Series(dtype=str)), errors='coerce')
+    df = df.dropna(subset=['date'])
+    cutoff = pd.Timestamp(EARLIEST_YEAR, EARLIEST_MONTH, 1)
+    df = df[df['date'] >= cutoff]
+
+    rows = []
+    for _, row in df.iterrows():
+        direction   = str(row.get('direction', '')).strip()
+        category    = str(row.get('category', '')).strip()
+        income_amt  = pd.to_numeric(row.get('income_amt', 0), errors='coerce') or 0
+        expense_amt = pd.to_numeric(row.get('expense_amt', 0), errors='coerce') or 0
+        dt = row['date'].strftime('%Y-%m-%d')
+
+        memo_parts = [
+            str(row.get('item', '')).strip(),
+            str(row.get('shop', '')).strip(),
+            str(row.get('note', '')).strip(),
+        ]
+        memo = ' '.join(p for p in memo_parts if p and p not in ('nan', '-'))
+
+        if direction == 'payment' and expense_amt > 0:
+            rows.append(('expense', category, int(expense_amt), memo, dt))
+        elif direction == 'income' and income_amt > 0:
+            rows.append(('income', category, int(income_amt), memo, dt))
+
+    return rows
+
+
+def import_zaim_to_db(filepath):
+    """Zaim CSV を source='zaim' としてインポート（MF データとの重複は除外）"""
+    rows = parse_zaim_csv(filepath)
+    conn = get_db()
+    now = datetime.now().isoformat()
+
+    # MF 側の (date, amount, type) セットを取得（重複チェック用）
+    mf_keys = set()
+    for r in conn.execute("SELECT date, amount, type FROM transactions WHERE source='mf'"):
+        mf_keys.add((r['date'], r['amount'], r['type']))
+
+    # MF と重複しない行のみ残す
+    unique_rows = [
+        row for row in rows
+        if (row[4], row[2], row[0]) not in mf_keys
+    ]
+
+    # 既存 Zaim データをすべて置き換え
+    prev_count = conn.execute("SELECT COUNT(*) FROM transactions WHERE source='zaim'").fetchone()[0]
+    conn.execute("DELETE FROM transactions WHERE source='zaim'")
+    conn.executemany(
+        'INSERT INTO transactions (type,category,amount,memo,date,source,created_at) VALUES (?,?,?,?,?,?,?)',
+        [(t, c, a, m, d, 'zaim', now) for t, c, a, m, d in unique_rows]
+    )
+
+    conn.commit()
+    conn.close()
+    return len(unique_rows), len(rows) - len(unique_rows)
+
+
+def import_zaim_rows_to_db(rows):
+    """Zaim 行データを source='zaim' としてインポート（DB からの直接呼び出し用）"""
+    conn = get_db()
+    now = datetime.now().isoformat()
+
+    mf_keys = set()
+    for r in conn.execute("SELECT date, amount, type FROM transactions WHERE source='mf'"):
+        mf_keys.add((r['date'], r['amount'], r['type']))
+
+    unique_rows = [
+        row for row in rows
+        if (row[4], row[2], row[0]) not in mf_keys
+    ]
+
+    prev_count = conn.execute("SELECT COUNT(*) FROM transactions WHERE source='zaim'").fetchone()[0]
+    conn.execute("DELETE FROM transactions WHERE source='zaim'")
+    conn.executemany(
+        'INSERT INTO transactions (type,category,amount,memo,date,source,created_at) VALUES (?,?,?,?,?,?,?)',
+        [(t, c, a, m, d, 'zaim', now) for t, c, a, m, d in unique_rows]
+    )
+
+    conn.commit()
+    conn.close()
+    return len(unique_rows), len(rows) - len(unique_rows), prev_count
 
 
 # ─────────────────────────────────────────
@@ -418,6 +584,8 @@ def get_yearly_matrix():
     result = []
     monthly_totals = {i: 0 for i in range(n_months)}
 
+    recent_start_idx = max(0, n_months - 12)
+
     for cat in all_cats:
         cat_actuals    = actuals.get(cat, {})
         monthly_budget = budget_map.get(cat, 0)
@@ -444,12 +612,20 @@ def get_yearly_matrix():
 
         months_with_data = [i for i in range(n_months) if month_data[i]['actual'] > 0]
         avg = annual_total // len(months_with_data) if months_with_data else 0
+
+        # 直近12か月集計
+        recent_total = sum(month_data[i]['actual'] for i in range(recent_start_idx, n_months))
+        recent_months_with_data = [i for i in range(recent_start_idx, n_months) if month_data[i]['actual'] > 0]
+        recent_avg = recent_total // len(recent_months_with_data) if recent_months_with_data else 0
+
         result.append({
             'category': cat,
             'color': color_map.get(cat, '#94a3b8'),
             'monthly_budget': monthly_budget,
             'annual_total': annual_total,
             'monthly_avg': avg,
+            'recent_total': recent_total,
+            'recent_avg': recent_avg,
             'months': month_data,
             'is_no_budget': cat in NO_BUDGET_CATS,
         })
@@ -482,6 +658,7 @@ def get_yearly_matrix():
         'monthly_totals_budget': monthly_totals_budget,
         'monthly_totals_no_budget': monthly_totals_no_budget,
         'no_budget_start_idx': len(budget_cats),
+        'recent_start_idx': recent_start_idx,
     }
 
 
@@ -929,13 +1106,13 @@ def api_transactions():
     conn = get_db()
     if category:
         rows = conn.execute(
-            "SELECT id,type,category,amount,memo,date FROM transactions "
+            "SELECT id,type,category,amount,memo,date,source FROM transactions "
             "WHERE date LIKE ? AND category=? ORDER BY date DESC,id DESC LIMIT 200",
             (f'{prefix}%', category)
         ).fetchall()
     else:
         rows = conn.execute(
-            'SELECT id,type,category,amount,memo,date FROM transactions WHERE date LIKE ? ORDER BY date DESC,id DESC LIMIT 200',
+            'SELECT id,type,category,amount,memo,date,source FROM transactions WHERE date LIKE ? ORDER BY date DESC,id DESC LIMIT 200',
             (f'{prefix}%',)
         ).fetchall()
     conn.close()
@@ -943,7 +1120,7 @@ def api_transactions():
 
 @app.route('/api/upload-csv', methods=['POST'])
 def api_upload_csv():
-    """CSVファイルをアップロードしてDBにインポート"""
+    """MF CSVをアップロード（含まれる年のみ置き換え・他の年のデータは維持）"""
     if 'file' not in request.files:
         return jsonify({'error': 'file フィールドが必要です'}), 400
     f = request.files['file']
@@ -952,8 +1129,65 @@ def api_upload_csv():
     filepath = os.path.join(UPLOAD_DIR, 'mf_all.csv')
     f.save(filepath)
     try:
-        inserted, skipped = import_csv_to_db(filepath)
-        return jsonify({'status': 'ok', 'inserted': inserted, 'skipped': skipped})
+        rows = parse_mf_csv(filepath)
+        years = sorted({r[4][:4] for r in rows})
+        inserted, replaced = import_csv_to_db(filepath)
+        return jsonify({
+            'status':   'ok',
+            'inserted': inserted,
+            'replaced': replaced,
+            'years':    years,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/upload-zaim-csv', methods=['POST'])
+def api_upload_zaim_csv():
+    """Zaim CSV をアップロードして MF と重複しない取引を追加"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'file フィールドが必要です'}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({'error': 'ファイルが空です'}), 400
+    filepath = os.path.join(UPLOAD_DIR, 'zaim_latest.csv')
+    f.save(filepath)
+    try:
+        inserted, skipped = import_zaim_to_db(filepath)
+        socketio.emit('mf_synced', {'source': 'zaim'})
+        return jsonify({'status': 'ok', 'inserted': inserted, 'skipped_duplicate': skipped})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-from-kakeibo', methods=['POST'])
+def api_sync_from_kakeibo():
+    """kakeibo.db から Zaim データを直接同期（同一サーバー環境のみ）"""
+    kakeibo_db = os.getenv(
+        'KAKEIBO_DB_PATH',
+        os.path.join(os.path.expanduser('~'), 'Desktop', 'kakeibo-dashboard', 'kakeibo.db')
+    )
+    if not os.path.exists(kakeibo_db):
+        return jsonify({'error': f'kakeibo.db が見つかりません: {kakeibo_db}'}), 404
+    try:
+        import sqlite3 as _sqlite3
+        kconn = _sqlite3.connect(kakeibo_db)
+        kconn.row_factory = _sqlite3.Row
+        cutoff = f'{EARLIEST_YEAR:04d}-{EARLIEST_MONTH:02d}-01'
+        k_rows = kconn.execute(
+            "SELECT type, category, amount, memo, date FROM transactions WHERE date >= ?",
+            (cutoff,)
+        ).fetchall()
+        kconn.close()
+        rows = [(r['type'], r['category'], r['amount'], r['memo'] or '', r['date']) for r in k_rows]
+        inserted, skipped, replaced = import_zaim_rows_to_db(rows)
+        socketio.emit('mf_synced', {'source': 'zaim'})
+        return jsonify({
+            'status': 'ok',
+            'inserted': inserted,
+            'skipped_duplicate': skipped,
+            'replaced_zaim': replaced,
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1202,4 +1436,4 @@ if __name__ == '__main__':
     _setup_line_on_startup(_pub)
     print(f'MFダッシュボード起動: http://localhost:{_port}')
     if _pub: print(f'  インターネット: {_pub}')
-    socketio.run(app, host='0.0.0.0', port=_port, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=_port, debug=False, allow_unsafe_werkzeug=True, use_reloader=False)

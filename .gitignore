@@ -1,4 +1,7 @@
+# 機密・環境設定
 .env
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -9,11 +12,29 @@ dist/
 build/
 .venv/
 venv/
+
+# DB（金融データは git に含めない）
+*.db
 *.db-wal
 *.db-shm
-screenshots/
-# uploads配下のCSVは除外（mf.db はgit管理する）
+
+# アップロードファイル（金融データ）
 uploads/*.csv
 uploads/*.png
 uploads/*.html
 uploads/otp.txt
+
+# スクリーンショット・一時ファイル
+screenshots/
+tmp_*.py
+analyze*.py
+analyze*.txt
+check_*.py
+check_*.txt
+find_*.py
+inspect_*.py
+map_*.py
+parse_*.py
+setup_*.py
+reimport.py
+reimport_log.txt

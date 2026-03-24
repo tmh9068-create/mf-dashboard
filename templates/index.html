@@ -23,8 +23,13 @@
       <span id="clock" class="header-clock"></span>
     </div>
     <div class="header-right">
-      <button class="btn-zaim" id="zaim-sync-btn">
-        <span id="zaim-btn-label">⟳ MF同期</span>
+      <input type="file" id="zaim-csv-input" accept=".csv" style="display:none" />
+      <button class="btn-secondary" id="zaim-csv-btn" title="Zaim CSVをアップロードして取引を追加">
+        <span id="zaim-csv-btn-label">📥 Zaim更新</span>
+      </button>
+      <input type="file" id="mf-csv-input" accept=".csv" style="display:none" />
+      <button class="btn-zaim" id="mf-csv-btn" title="MoneyForward CSVをアップロードして取引を更新">
+        <span id="mf-csv-btn-label">📥 MF更新</span>
       </button>
     </div>
   </div>
@@ -174,7 +179,7 @@
       </div>
       <div class="trans-wrap">
         <table class="trans-table">
-          <thead><tr><th>日付</th><th>カテゴリ</th><th>メモ</th><th class="tr">金額</th></tr></thead>
+          <thead><tr><th>日付</th><th>カテゴリ</th><th>メモ</th><th>出典</th><th class="tr">金額</th></tr></thead>
           <tbody id="trans-tbody"></tbody>
         </table>
         <div id="trans-empty" class="trans-empty" style="display:none">取引がありません</div>

@@ -96,6 +96,23 @@ body {
 .btn-zaim:disabled{ opacity: .4; cursor: not-allowed; }
 .btn-zaim.running { animation: shimmer-btn 1.2s infinite; }
 @keyframes shimmer-btn { 0%,100%{opacity:1} 50%{opacity:.6} }
+.btn-secondary {
+  padding: 7px 14px;
+  border: 1px solid rgba(52,211,153,.4);
+  background: rgba(52,211,153,.08); color: #34d399;
+  border-radius: 8px; font-size: .82rem; font-weight: 700;
+  cursor: pointer; font-family: inherit; white-space: nowrap;
+  transition: all .2s; position: relative; overflow: hidden;
+}
+.btn-secondary:hover { border-color: #34d399; box-shadow: 0 0 10px rgba(52,211,153,.25); }
+.btn-secondary:disabled { opacity: .4; cursor: not-allowed; }
+.btn-secondary.running { animation: shimmer-btn 1.2s infinite; }
+.source-badge {
+  display: inline-block; font-size: .65rem; font-weight: 700;
+  padding: 1px 5px; border-radius: 4px; letter-spacing: .03em;
+}
+.source-badge.mf   { background: rgba(91,127,255,.18); color: #818cf8; }
+.source-badge.zaim { background: rgba(52,211,153,.18); color: #34d399; }
 
 /* ========================
    メイン

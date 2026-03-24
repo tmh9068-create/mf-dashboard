@@ -29,7 +29,7 @@ let dailyCatList = ['合計'];
 // 月間トレンドのカテゴリフィルター
 let selectedTrendCat = null;
 
-const NO_BUDGET_CATS = new Set(['未分類','現金・カード','その他','自動車','特別な支出','保険','税・社会保障']);
+const NO_BUDGET_CATS = new Set(['交通','高額支出(10万以上)','交際費','未分類','レジャー']);
 
 // 前回値（変化アニメーション用）
 let prevSummaryVals = { expense: 0, budget: 0, remaining: 0, daily: 0 };
@@ -37,29 +37,29 @@ let prevSummaryVals = { expense: 0, budget: 0, remaining: 0, daily: 0 };
 const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
 const CAT_ICONS = {
-  // ── 支出・予算管理カテゴリ（実データに基づく）
-  '食費':         '🍚',
-  '日用品':       '🧴',
-  '教養・教育':   '📚',
-  '衣服・美容':   '👗',
-  '交通費':       '🚃',
-  '趣味・娯楽':   '🎮',
-  '水道・光熱費': '💡',
-  '通信費':       '📱',
-  '健康・医療':   '🏥',
-  '交際費':       '🥂',
+  // ── 支出・予算管理カテゴリ（kakeibo 準拠）
+  'スーパー':           '🛒',
+  '外食':               '🍽️',
+  '学費':               '🎓',
+  '固定費':             '🏠',
+  '小遣い':             '🎮',
+  '美容':               '💄',
+  '日用品':             '🧴',
+  'パパ昼食':           '🍱',
+  '水道':               '🚿',
+  'レオ':               '🐶',
+  '衣服':               '👗',
+  '電気':               '⚡',
+  'ガス':               '🔥',
   // ── 予算外カテゴリ
-  '未分類':       '❓',
-  '現金・カード': '💳',
-  'その他':       '📂',
-  '自動車':       '🚗',
-  '特別な支出':   '💸',
-  '保険':         '🛡️',
-  '税・社会保障': '🏛️',
+  '交通':               '🚃',
+  'レジャー':           '✈️',
+  '交際費':             '🥂',
+  '高額支出(10万以上)': '💸',
+  '未分類':             '❓',
   // ── 収入
-  '収入':         '💴',
-  '一時所得':     '💰',
-  'その他収入':   '📥',
+  '給与所得':           '💴',
+  'その他収入':         '📥',
 };
 
 /* ──────────────────────────────────────
@@ -115,7 +115,8 @@ function setupSocket() {
   socket.on('disconnect',   () => setLive(false));
   socket.on('data_updated', () => refreshAll());
   socket.on('mf_synced',  (d) => {
-    showToast(`✓ MF同期完了: ${d.inserted}件追加 / 予算${d.budgets_imported}カテゴリ`, 'success');
+    const src = d.source === 'zaim' ? 'Zaim' : 'MF';
+    showToast(`✓ ${src}データ更新完了`, 'success');
     loadCategories().then(() => { initDailyCatSlider(); refreshAll(); });
   });
 }
@@ -293,11 +294,9 @@ function heatColor(pct, actual, budget, isFuture) {
     return `rgba(80,160,210,${(0.22 + intensity * 0.55).toFixed(2)})`;
   }
   if (pct > 100) {
-    // 積み上げ実績が積み上げ予算の100%超：赤
     return 'rgba(255,77,109,0.75)';
   }
   if (pct > 80) {
-    // 積み上げ実績が積み上げ予算の80%超：オレンジ
     return 'rgba(255,140,0,0.70)';
   }
   // 予算内（80%以下）：緑（使用率に応じて濃さが変化）
@@ -305,19 +304,14 @@ function heatColor(pct, actual, budget, isFuture) {
   return `rgba(29,233,139,${(0.20 + t * 0.42).toFixed(2)})`;
 }
 
-// 月次マトリクス セル値フォーマット（千円・万円混在）
-function fmtCellMan(v) {
+// セル値フォーマット（千円未満切り上げ表示）
+function fmtCellCeil(v) {
   if (v <= 0) return '-';
-  if (v < 1000)  return '1千';           // 千円未満 → 1千として表示
-  if (v < 10000) return Math.round(v / 1000) + '千';
-  return (v / 10000).toFixed(1).replace(/\.0$/, '') + '万';
+  const k = Math.ceil(v / 1000);  // 千円単位で切り上げ
+  if (k < 10) return k + '千';
+  return (k / 10).toFixed(1).replace(/\.0$/, '') + '万';
 }
-// 日次マトリクス セル値フォーマット（千円単位、1円以上表示）
-function fmtSen(v) {
-  if (v <= 0) return '';
-  if (v < 1000) return '1千';
-  return (v / 1000).toFixed(1).replace(/\.0$/, '') + '千';
-}
+function fmtSen(v) { return v <= 0 ? '' : fmtCellCeil(v); }
 
 /* ──────────────────────────────────────
    マトリクス描画（過去12ヶ月ローリング）
@@ -334,6 +328,7 @@ function renderMatrix(data) {
   const totBudget         = data.monthly_totals_budget    || {};
   const totNoBudget       = data.monthly_totals_no_budget || {};
   const noBudgetStartIdx  = data.no_budget_start_idx  ?? cats.findIndex(c => c.is_no_budget);
+  const recentStart       = data.recent_start_idx     ?? Math.max(0, monthList.length - 12);
 
   const budgetCats   = cats.slice(0, noBudgetStartIdx < 0 ? cats.length : noBudgetStartIdx);
   const noBudgetCats = noBudgetStartIdx >= 0 ? cats.slice(noBudgetStartIdx) : [];
@@ -406,9 +401,11 @@ function renderMatrix(data) {
       cell.dataset.actual = actual; cell.dataset.budget = budget;
       cell.dataset.pct = pct ?? ''; cell.dataset.prevActual = prevMd.actual ?? 0;
 
-      // セル内テキスト（支出なし：「-」のみ、支出あり：色のみで表現）
-      if (!isFuture && actual === 0) {
-        cell.innerHTML = `<span class="hm-val hm-val-dash">-</span>`;
+      // セル内テキスト（千円未満切り上げ表示）
+      if (!isFuture) {
+        cell.innerHTML = actual > 0
+          ? `<span class="hm-val">${fmtCellCeil(actual)}</span>`
+          : `<span class="hm-val hm-val-dash">-</span>`;
       }
       if (!isFuture) cell.addEventListener('click', () => selectCell(y, m, cat.category));
 
@@ -416,15 +413,17 @@ function renderMatrix(data) {
       tr.appendChild(td);
     }
 
+    // 直近12か月 合計
+    const recentTot = cat.recent_total ?? cat.annual_total;
     const annualTd = document.createElement('td');
     annualTd.className = 'summary-data-cell annual';
-    annualTd.textContent = cat.annual_total >= 10000
-      ? `${(cat.annual_total / 10000).toFixed(0)}万` : fmtYen(cat.annual_total);
-    tr.appendChild(annualTd);
+    annualTd.textContent = recentTot >= 10000
+      ? `${(recentTot / 10000).toFixed(0)}万` : fmtYen(recentTot);
 
+    // 直近12か月 月均
     const avgTd = document.createElement('td');
     avgTd.className = 'summary-data-cell avg';
-    const avg    = cat.monthly_avg;
+    const avg    = cat.recent_avg ?? cat.monthly_avg;
     const bgt    = cat.monthly_budget || 0;
     const delta  = bgt > 0 ? bgt - avg : null;
     const avgTxt = avg >= 10000 ? `${(avg / 10000).toFixed(1)}万` : (avg > 0 ? fmtYen(avg) : '―');
@@ -438,14 +437,14 @@ function renderMatrix(data) {
     }
     avgTd.innerHTML = `<div class="avg-main">${avgTxt}</div>${deltaHtml}`;
 
-    // 列順：月均/残 → 12ヶ月計
+    // 列順：月均 → 合計
     tr.appendChild(avgTd);
     tr.appendChild(annualTd);
 
     tbody.appendChild(tr);
   }
 
-  // ── フッター行ヘルパー
+  // ── フッター行ヘルパー（grand は直近12か月のみ集計）
   function makeFootRow(label, totals, catList, cls = '') {
     const tr = document.createElement('tr');
     if (cls) tr.className = cls;
@@ -454,14 +453,15 @@ function renderMatrix(data) {
     const nCols = Object.keys(totals).length;
     for (let idx = 0; idx < nCols; idx++) {
       const t = totals[idx] || 0;
-      grand += t;
+      if (idx >= recentStart) grand += t;   // 直近12か月のみ合算
       const v = t >= 10000 ? `${(t / 10000).toFixed(0)}万` : (t > 0 ? fmtYen(t) : '―');
       tr.innerHTML += `<td>${v}</td>`;
     }
     const g = grand >= 10000 ? `${(grand / 10000).toFixed(0)}万` : fmtYen(grand);
-    const avgSum = catList.reduce((s, c) => s + (c.monthly_avg || 0), 0);
+    // 月均も直近12か月平均の合計
+    const avgSum = catList.reduce((s, c) => s + (c.recent_avg ?? c.monthly_avg ?? 0), 0);
     const avgTxt = avgSum >= 10000 ? `${(avgSum/10000).toFixed(0)}万` : (avgSum > 0 ? fmtYen(avgSum) : '―');
-    // 列順：月均/残 → 12ヶ月計
+    // 列順：月均 → 合計
     tr.innerHTML += `<td class="avg-foot">${avgTxt}</td><td>${g}</td>`;
     return tr;
   }
@@ -696,7 +696,7 @@ function renderDetailCatList(bp) {
         ${hasBgt ? `<span class="dcl-pct ${pct > 100 ? 'over' : pct > 80 ? 'warn' : 'ok'}">${pct?.toFixed(0) ?? 0}%</span>` : ''}
       </div>
       <div class="dcl-right">
-        <span class="dcl-actual">${fmtYen(cat.actual)}</span>
+        <span class="dcl-actual" ${cat.actual < 0 ? 'style="color:var(--income)"' : ''}>${cat.actual < 0 ? '+' : ''}${fmtYen(cat.actual)}</span>
         ${hasBgt ? `<span class="dcl-budget">/ ${fmtYen(cat.budget)}</span>` : `<span class="dcl-share">(${sharePct}%)</span>`}
       </div>`;
     container.appendChild(row);
@@ -909,7 +909,6 @@ function renderAllTrend() {
 }
 
 /* ──────────────────────────────────────
-   メインダッシュボード/* ──────────────────────────────────────
    メインダッシュボード：今月の進捗ライングラフ
 ────────────────────────────────────── */
 function renderMainProgressChart(data) {
@@ -1028,17 +1027,42 @@ function renderDailyMatrix(data) {
     return;
   }
 
-  // 最大日別支出（カラースケール用）
-  const maxDaily = Math.max(...Object.values(daily_totals).filter(v => v > 0), 1);
+  // 経過日数（今月中 = today_day、過去月 = last_day）
+  const elapsed = today_day || last_day;
 
-  // -- ヘッダー
+  // 日均フォーマット（1日あたりの金額向け）
+  function fmtDailyVal(v) {
+    if (!v || v === 0) return '―';
+    const a = Math.abs(Math.round(v));
+    if (a >= 10000) return `${(a / 10000).toFixed(1)}万`;
+    if (a >= 1000)  return `${(a / 1000).toFixed(1)}千`;
+    return `¥${a.toLocaleString()}`;
+  }
+
+  // 日均セル HTML 生成（月額予算から日あたり予算を算出して差額表示）
+  function makeDailyAvgCell(total, monthlyBudget) {
+    if (!total) return `<td class="summary-data-cell avg"><div class="avg-main">―</div></td>`;
+    const dailyAvg = elapsed > 0 ? total / elapsed : 0;
+    const dailyBgt = monthlyBudget > 0 ? monthlyBudget / last_day : 0;
+    const avgTxt   = fmtDailyVal(dailyAvg);
+    let deltaHtml  = '';
+    if (dailyBgt > 0 && total > 0) {
+      const delta = dailyBgt - dailyAvg;
+      const cls   = delta >= 0 ? 'avg-delta-ok' : 'avg-delta-over';
+      const sym   = delta >= 0 ? '▼' : '▲';
+      deltaHtml = `<div class="avg-delta ${cls}">${sym}${fmtDailyVal(Math.abs(delta))}</div>`;
+    }
+    return `<td class="summary-data-cell avg"><div class="avg-main" style="font-size:.72rem">${avgTxt}</div>${deltaHtml}</td>`;
+  }
+
+  // -- ヘッダー（日均列を合計の左に追加）
   let html = '<table class="matrix-table dm-table"><thead><tr>';
   html += '<th class="hm-cat-th">カテゴリ</th>';
   for (let d = 1; d <= last_day; d++) {
     const isToday = (d === today_day);
-    html += `<th class="dm-day-th${isToday ? ' current-month' : ''}">${d}</th>`;
+    html += `<th class="dm-day-th${isToday ? ' current-month' : ''}">${d}日</th>`;
   }
-  html += '<th class="summary-col">計</th></tr></thead><tbody>';
+  html += '<th class="summary-col avg-col-hdr">日均</th><th class="summary-col">計</th></tr></thead><tbody>';
 
   const budgetCats   = categories.filter(c => !c.is_no_budget);
   const noBudgetCats = categories.filter(c =>  c.is_no_budget);
@@ -1076,14 +1100,15 @@ function renderDailyMatrix(data) {
         bg = heatColor(pct, actual, cat.monthly_budget || 1, isFuture);
       }
       const valHtml = actual > 0
-        ? ''
+        ? `<span class="dm-val">${fmtCellCeil(actual)}</span>`
         : `<span class="dm-val hm-val-dash">-</span>`;
       const extraCls  = actual > 0 ? ' dm-cell-clickable' : '';
       const extraData = actual > 0 ? ` data-day="${d}" data-cat="${escHtml(cat.category)}"` : '';
       row += `<td class="dm-td"><div class="hm-cell dm-cell${isToday ? ' cell-current-col' : ''}${extraCls}"${extraData} style="background:${bg}">${valHtml}</div></td>`;
     }
-    const tot = fmtSen(cat.total);
-    row += `<td class="summary-data-cell annual">${tot}</td></tr>`;
+    // 日均列（月額予算から日あたり予算を算出）
+    row += makeDailyAvgCell(cat.total, cat.is_no_budget ? 0 : (cat.monthly_budget || 0));
+    row += `<td class="summary-data-cell annual">${fmtSen(cat.total)}</td></tr>`;
     return row;
   };
 
@@ -1092,19 +1117,21 @@ function renderDailyMatrix(data) {
 
   // 予算内合計行
   let budgetTotal = 0;
+  let budgetMonthlySum = budgetCats.reduce((s, c) => s + (c.monthly_budget || 0), 0);
   html += `<tr class="foot-budget"><td>予算内合計</td>`;
   for (let d = 1; d <= last_day; d++) {
     const t = dayBudgetTotals[d];
     budgetTotal += t;
     const isToday = (d === today_day);
-    const v = t > 0 ? '' : `<span class="dm-val hm-val-dash">-</span>`;
+    const v = t > 0 ? `<span class="dm-val">${fmtCellCeil(t)}</span>` : `<span class="dm-val hm-val-dash">-</span>`;
     html += `<td class="dm-td"><div class="hm-cell dm-cell${isToday ? ' cell-current-col' : ''}" style="background:#0d2b1a">${v}</div></td>`;
   }
+  html += makeDailyAvgCell(budgetTotal, budgetMonthlySum);
   html += `<td class="summary-data-cell annual">${fmtSen(budgetTotal)}</td></tr>`;
 
   // 予算外カテゴリ行
   if (noBudgetCats.length > 0) {
-    html += `<tr class="matrix-section-divider"><td colspan="${last_day + 2}">
+    html += `<tr class="matrix-section-divider"><td colspan="${last_day + 3}">
       <span class="matrix-section-label">予算外（集計のみ）</span></td></tr>`;
     noBudgetCats.forEach((cat, i) => { html += renderCatRow(cat, budgetCats.length + i); });
   }
@@ -1116,9 +1143,10 @@ function renderDailyMatrix(data) {
     const t = dayGrandTotals[d];
     grandTotal += t;
     const isToday = (d === today_day);
-    const v = t > 0 ? '' : `<span class="dm-val hm-val-dash">-</span>`;
+    const v = t > 0 ? `<span class="dm-val">${fmtCellCeil(t)}</span>` : `<span class="dm-val hm-val-dash">-</span>`;
     html += `<td class="dm-td"><div class="hm-cell dm-cell${isToday ? ' cell-current-col' : ''}" style="background:#0c1d3a">${v}</div></td>`;
   }
+  html += makeDailyAvgCell(grandTotal, budgetMonthlySum);
   html += `<td class="summary-data-cell annual">${fmtSen(grandTotal)}</td></tr>`;
   html += `</tbody></table>`;
 
@@ -1163,16 +1191,23 @@ async function openCellPopup(year, month, day, catName, event) {
     ).then(r => r.json());
 
     const dayStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const dayTxns = txns.filter(t => t.date === dayStr && t.type === 'expense');
+    // income（割引・返金含む）も表示
+    const dayTxns = txns.filter(t => t.date === dayStr);
 
     if (dayTxns.length === 0) {
       body.innerHTML = '<div class="popup-empty">取引なし</div>';
     } else {
-      body.innerHTML = dayTxns.map(t => `
-        <div class="popup-txn-row">
-          <span class="popup-memo">${escHtml(t.memo || '—')}</span>
-          <span class="popup-amt">¥${Number(t.amount).toLocaleString()}</span>
-        </div>`).join('');
+      body.innerHTML = dayTxns.map(t => {
+        const isRefund = t.type === 'expense' && t.amount < 0;
+        const isPositive = t.type === 'income' || isRefund;
+        const sign = isPositive ? '+' : '-';
+        const style = isPositive ? 'style="color:var(--income)"' : '';
+        return `
+          <div class="popup-txn-row">
+            <span class="popup-memo">${escHtml(t.memo || '—')}</span>
+            <span class="popup-amt" ${style}>${sign}¥${Math.abs(Number(t.amount)).toLocaleString()}</span>
+          </div>`;
+      }).join('');
     }
   } catch {
     body.innerHTML = '<div class="popup-empty">取得エラー</div>';
@@ -1201,7 +1236,7 @@ function closeCellPopup() {
 }
 
 /* ──────────────────────────────────────
-   取引一覧
+   取引一覧（カテゴリ列付き）
 ────────────────────────────────────── */
 function renderTransactions(transactions) {
   const tbody = document.getElementById('trans-tbody');
@@ -1216,14 +1251,20 @@ function renderTransactions(transactions) {
 
   transactions.forEach((t, i) => {
     const color = colorMap[t.category] || '#94a3b8';
-    const isExp = t.type === 'expense';
+    const isRefund = t.type === 'expense' && t.amount < 0;
+    const amtSign  = (t.type === 'income' || isRefund) ? '+' : '-';
+    const amtCls   = (t.type === 'income' || isRefund) ? 'income' : 'expense';
     const tr = document.createElement('tr');
     tr.style.animationDelay = `${i * 20}ms`;
+    const srcLabel = t.source === 'zaim' ? '<span class="source-badge zaim">Zaim</span>'
+                   : t.source === 'mf'   ? '<span class="source-badge mf">MF</span>'
+                   : '';
     tr.innerHTML = `
       <td style="color:var(--muted)">${fmtDate(t.date)}</td>
       <td><span class="chip"><span class="chip-dot" style="background:${color}"></span>${escHtml(t.category)}</span></td>
       <td style="color:var(--muted);font-size:.75rem">${escHtml(t.memo || '—')}</td>
-      <td class="tr amt ${t.type}">${isExp ? '-' : '+'}${fmtYen(t.amount)}</td>`;
+      <td>${srcLabel}</td>
+      <td class="tr amt ${amtCls}">${amtSign}${fmtYen(t.amount)}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -1445,11 +1486,26 @@ async function refreshDailyChart() {
 ────────────────────────────────────── */
 function setupEvents() {
   document.getElementById('close-detail').addEventListener('click', closeDetail);
-  document.getElementById('zaim-sync-btn').addEventListener('click', handleZaimSync);
   document.getElementById('daily-prev-month')?.addEventListener('click', () => changeDailyMonth(-1));
   document.getElementById('daily-next-month')?.addEventListener('click', () => changeDailyMonth(+1));
   document.getElementById('daily-cat-prev')?.addEventListener('click',  () => changeDailyCategory(-1));
   document.getElementById('daily-cat-next')?.addEventListener('click',  () => changeDailyCategory(+1));
+
+  // MF CSV アップロード
+  const mfCsvBtn   = document.getElementById('mf-csv-btn');
+  const mfCsvInput = document.getElementById('mf-csv-input');
+  if (mfCsvBtn && mfCsvInput) {
+    mfCsvBtn.addEventListener('click', () => mfCsvInput.click());
+    mfCsvInput.addEventListener('change', handleMfCsvUpload);
+  }
+
+  // Zaim CSV アップロード
+  const zaimCsvBtn   = document.getElementById('zaim-csv-btn');
+  const zaimCsvInput = document.getElementById('zaim-csv-input');
+  if (zaimCsvBtn && zaimCsvInput) {
+    zaimCsvBtn.addEventListener('click', () => zaimCsvInput.click());
+    zaimCsvInput.addEventListener('change', handleZaimCsvUpload);
+  }
 }
 
 function closeDetail() {
@@ -1464,29 +1520,65 @@ function closeDetail() {
 }
 
 /* ──────────────────────────────────────
-   Zaim同期
+   MF CSV アップロード
 ────────────────────────────────────── */
-async function handleZaimSync() {
-  const btn   = document.getElementById('zaim-sync-btn');
-  const label = document.getElementById('zaim-btn-label');
+async function handleMfCsvUpload(event) {
+  const file  = event.target.files[0];
+  if (!file) return;
+  const btn   = document.getElementById('mf-csv-btn');
+  const label = document.getElementById('mf-csv-btn-label');
   btn.disabled = true; btn.classList.add('running');
-  label.textContent = '⟳ 同期中...';
-    showToast('MoneyForward同期を開始しました（完了時に通知されます）', 'info');
+  label.textContent = '📥 アップロード中...';
+  showToast(`MF CSV「${file.name}」を処理中...`, 'info');
+
+  const formData = new FormData();
+  formData.append('file', file);
   try {
-    const res  = await fetch('/api/mf-auto-download', { method: 'POST' });
+    const res  = await fetch('/api/upload-csv', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '失敗');
-    // 202 Accepted → バックグラウンド実行中。完了はWebSocket(zaim_synced)で受信
+    const yearsMsg = data.years ? ` (${data.years.join('・')}年分)` : '';
+    showToast(`MF更新完了: ${data.inserted}件インポート${yearsMsg}`, 'success');
+    await refreshAll();
   } catch (err) {
-    showToast(`MF取得エラー: ${err.message}`, 'error');
+    showToast(`MF更新エラー: ${err.message}`, 'error');
+  } finally {
     btn.disabled = false; btn.classList.remove('running');
-    label.textContent = '⟳ Zaim同期';
+    label.textContent = '📥 MF更新';
+    event.target.value = '';
   }
-  // ボタンはzaim_syncedイベント受信後に解除
-  socket.once('mf_synced', () => {
+}
+
+/* ──────────────────────────────────────
+   Zaim CSV アップロード
+────────────────────────────────────── */
+async function handleZaimCsvUpload(event) {
+  const file  = event.target.files[0];
+  if (!file) return;
+  const btn   = document.getElementById('zaim-csv-btn');
+  const label = document.getElementById('zaim-csv-btn-label');
+  btn.disabled = true; btn.classList.add('running');
+  label.textContent = '📥 アップロード中...';
+  showToast(`Zaim CSV「${file.name}」を処理中...`, 'info');
+
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res  = await fetch('/api/upload-zaim-csv', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '失敗');
+    showToast(
+      `Zaim更新完了: ${data.inserted}件追加（重複スキップ: ${data.skipped_duplicate}件）`,
+      'success'
+    );
+    await refreshAll();
+  } catch (err) {
+    showToast(`Zaim更新エラー: ${err.message}`, 'error');
+  } finally {
     btn.disabled = false; btn.classList.remove('running');
-    label.textContent = '⟳ Zaim同期';
-  });
+    label.textContent = '📥 Zaim更新';
+    event.target.value = '';
+  }
 }
 
 /* ──────────────────────────────────────
