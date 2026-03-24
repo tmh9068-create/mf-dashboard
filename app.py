@@ -412,18 +412,20 @@ def import_csv_to_db(filepath):
 # Zaim CSV インポート
 # ─────────────────────────────────────────
 ZAIM_COL_MAP = {
-    '日付':     'date',
-    '方向':     'direction',
-    'カテゴリ': 'category',
-    '品目':     'item',
-    'メモ':     'note',
-    'お店':     'shop',
-    '通貨':     'currency',
-    '収入':     'income_amt',
-    '支出':     'expense_amt',
-    '振替':     'is_transfer',
-    '残高調整': 'is_adjust',
-    '集計の設定': 'include_flag',
+    '日付':           'date',
+    '方法':           'direction',   # 実際の列名は「方法」
+    '方向':           'direction',   # 旧形式への互換
+    'カテゴリ':       'category',
+    'カテゴリの内訳': 'subcategory',
+    '品目':           'item',
+    'メモ':           'note',
+    'お店':           'shop',
+    '通貨':           'currency',
+    '収入':           'income_amt',
+    '支出':           'expense_amt',
+    '振替':           'is_transfer',
+    '残高調整':       'is_adjust',
+    '集計の設定':     'include_flag',
 }
 
 def parse_zaim_csv(filepath):
