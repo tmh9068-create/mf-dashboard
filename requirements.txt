@@ -1,7 +1,4 @@
 flask>=3.0.0
-flask-socketio>=5.3.6
-python-socketio>=5.11.1
-python-engineio>=4.9.1
 pandas>=2.0.0
 openpyxl>=3.1.0
 werkzeug>=3.0.0

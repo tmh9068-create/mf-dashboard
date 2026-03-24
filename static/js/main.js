@@ -14,7 +14,6 @@ let cumulChart      = null;
 let detailCatChart  = null;
 let mainCumulChart  = null;
 let monthlyBarChart = null;
-let socket          = null;
 let selectedCategory  = null;
 
 // 日次チャートの年月（デフォルト = 今月）
@@ -67,7 +66,6 @@ const CAT_ICONS = {
 ────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   startClock();
-  setupSocket();
   setupEvents();
   await loadCategories();
   initDailyCatSlider();
@@ -106,26 +104,6 @@ async function loadCategories() {
   } catch (e) { console.error('カテゴリ取得失敗', e); }
 }
 
-/* ──────────────────────────────────────
-   WebSocket
-────────────────────────────────────── */
-function setupSocket() {
-  socket = io({ transports: ['polling'] });
-  socket.on('connect',      () => setLive(true));
-  socket.on('disconnect',   () => setLive(false));
-  socket.on('data_updated', () => refreshAll());
-  socket.on('mf_synced',  (d) => {
-    const src = d.source === 'zaim' ? 'Zaim' : 'MF';
-    showToast(`✓ ${src}データ更新完了`, 'success');
-    loadCategories().then(() => { initDailyCatSlider(); refreshAll(); });
-  });
-}
-
-function setLive(on) {
-  const b = document.getElementById('live-badge');
-  b.textContent = on ? '● LIVE' : '● オフライン';
-  b.className   = on ? 'live-badge' : 'live-badge offline';
-}
 
 /* ──────────────────────────────────────
    全体リフレッシュ

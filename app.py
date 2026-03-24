@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import sqlite3, os, calendar
 from datetime import datetime, date
@@ -9,7 +8,6 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'mf-dashboard-2026'
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading', allow_upgrades=False)
 
 _BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR  = os.getenv('DATA_DIR', '')
@@ -1175,7 +1173,6 @@ def api_upload_zaim_csv():
     f.save(filepath)
     try:
         inserted, skipped = import_zaim_to_db(filepath)
-        socketio.emit('mf_synced', {'source': 'zaim'})
         return jsonify({'status': 'ok', 'inserted': inserted, 'skipped_duplicate': skipped})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1202,7 +1199,6 @@ def api_sync_from_kakeibo():
         kconn.close()
         rows = [(r['type'], r['category'], r['amount'], r['memo'] or '', r['date']) for r in k_rows]
         inserted, skipped, replaced = import_zaim_rows_to_db(rows)
-        socketio.emit('mf_synced', {'source': 'zaim'})
         return jsonify({
             'status': 'ok',
             'inserted': inserted,
@@ -1296,10 +1292,6 @@ def _run_mf_sync_bg():
         if budgets:
             today = date.today()
             save_budgets_from_mf(budgets, today.year, today.month)
-        socketio.emit('mf_synced', {
-            'inserted': inserted, 'skipped': skipped,
-            'budgets_imported': len(budgets),
-        })
         push_text(
             f'✅ MoneyForward同期完了！\n'
             f'━━━━━━━━━━━━━━\n'
@@ -1388,11 +1380,6 @@ def _send_last_month_line(reply_token):
     reply_text(reply_token, msg.strip())
 
 
-@socketio.on('connect')
-def on_connect():
-    today = date.today()
-    emit('init', {'year': today.year, 'month': today.month})
-
 
 def start_ngrok(port: int = 5000) -> str | None:
     ngrok_token = os.getenv('NGROK_TOKEN', '')
@@ -1457,4 +1444,4 @@ if __name__ == '__main__':
     _setup_line_on_startup(_pub)
     print(f'MFダッシュボード起動: http://localhost:{_port}')
     if _pub: print(f'  インターネット: {_pub}')
-    socketio.run(app, host='0.0.0.0', port=_port, debug=False, allow_unsafe_werkzeug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=_port, debug=False, use_reloader=False)
